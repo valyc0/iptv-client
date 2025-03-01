@@ -112,11 +112,7 @@
             if (m3uContent) {
                 parseM3U(m3uContent);
                 localStorage.setItem('m3uPlaylist', m3uContent);
-            } else {
-                const storedPlaylist = localStorage.getItem('m3uPlaylist');
-                if (storedPlaylist) {
-                    parseM3U(storedPlaylist);
-                }
+                localStorage.setItem('m3uUrl', url);
             }
         }
 
@@ -159,9 +155,26 @@
             searchInput.addEventListener('input', filterChannels);
         }
 
+        // Load saved playlist on page load
+        window.addEventListener('load', function() {
+            const storedPlaylist = localStorage.getItem('m3uPlaylist');
+            const storedUrl = localStorage.getItem('m3uUrl');
+            if (storedPlaylist) {
+                parseM3U(storedPlaylist);
+                if (storedUrl) {
+                    document.getElementById('m3uUrl').value = storedUrl;
+                }
+            }
+        });
+
         function clearPlaylist() {
-            localStorage.removeItem('m3uPlaylist');
+            localStorage.clear(); // Clear all stored data
             document.getElementById('playlist').innerHTML = "Nessuna playlist caricata";
+            document.getElementById('m3uUrl').value = '';
+            document.getElementById('current-channel-name').textContent = '';
+            const video = document.getElementById('player');
+            video.pause();
+            video.src = '';
         }
 
         let currentChannelIndex = -1;
@@ -176,6 +189,9 @@
 
             // Update channel name display
             document.getElementById('current-channel-name').textContent = element.textContent;
+
+            // Scroll channel into view
+            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
             if (Hls.isSupported()) {
                 const hls = new Hls();
