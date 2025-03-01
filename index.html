@@ -122,7 +122,10 @@
             
             const reader = new FileReader();
             reader.onload = function(e) {
-                parseM3U(e.target.result);
+                const content = e.target.result;
+                parseM3U(content);
+                // Save the loaded playlist to localStorage
+                localStorage.setItem('m3uPlaylist', content);
             };
             reader.readAsText(file);
         }
@@ -156,10 +159,11 @@
         }
 
         // Load saved playlist on page load
-        window.addEventListener('load', function() {
+        document.addEventListener('DOMContentLoaded', function() {
             const storedPlaylist = localStorage.getItem('m3uPlaylist');
             const storedUrl = localStorage.getItem('m3uUrl');
             if (storedPlaylist) {
+                console.log('Loading saved playlist...');
                 parseM3U(storedPlaylist);
                 if (storedUrl) {
                     document.getElementById('m3uUrl').value = storedUrl;
