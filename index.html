@@ -80,7 +80,8 @@
             <button onclick="clearPlaylist()">Cancella Playlist</button>
             <br>
             <input type="file" id="fileInput" accept=".m3u" onchange="loadFile(event)">
-
+            <input type="text" id="channelSearch" placeholder="Cerca canale">
+        
             <h3>Canali disponibili</h3>
             <div id="playlist">Nessuna playlist caricata</div>
         </div>
@@ -150,6 +151,9 @@
             if (playlistDiv.innerHTML === "") {
                 playlistDiv.innerHTML = "<p style='color: red;'>Nessun canale trovato!</p>";
             }
+
+            const searchInput = document.getElementById('channelSearch');
+            searchInput.addEventListener('input', filterChannels);
         }
 
         function clearPlaylist() {
@@ -203,6 +207,21 @@
                 channel.click();
             }
         }
+
+        function filterChannels() {
+            const searchTerm = document.getElementById('channelSearch').value.toLowerCase();
+            const channels = document.querySelectorAll('.channel');
+
+            channels.forEach(channel => {
+                const channelName = channel.textContent.toLowerCase();
+                if (channelName.includes(searchTerm)) {
+                    channel.style.display = '';
+                } else {
+                    channel.style.display = 'none';
+                }
+            });
+        }
+
 
         function updateChannelButtons() {
             const playlist = document.getElementById("playlist");
