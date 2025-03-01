@@ -69,6 +69,12 @@
             border-radius: 5px;
             box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.2);
         }
+
+        #current-channel-name {
+            margin-top: 10px;
+            font-size: 18px;
+            color: #333;
+        }
     </style>
 </head>
 <body>
@@ -89,10 +95,7 @@
         <div id="player-container">
             <h3>Player</h3>
             <video id="player" controls></video>
-            <div id="channel-controls">
-                <button id="previous-channel-button" onclick="previousChannel()">&#9664;</button>
-                <button id="next-channel-button" onclick="nextChannel()">&#9654;</button>
-            </div>
+            <h3 id="current-channel-name"></h3>
         </div>
     </div>
     <script>
@@ -166,11 +169,13 @@
         function playChannel(url, element, index) {
             const video = document.getElementById("player");
             currentChannelIndex = index;
-            updateChannelButtons();
 
             // Evidenzia il canale attivo
             document.querySelectorAll(".channel").forEach(el => el.classList.remove("active"));
             element.classList.add("active");
+
+            // Update channel name display
+            document.getElementById('current-channel-name').textContent = element.textContent;
 
             if (Hls.isSupported()) {
                 const hls = new Hls();
@@ -186,17 +191,34 @@
         }
 
         function previousChannel() {
-            if (currentChannelIndex > 0) {
-                currentChannelIndex--;
-                playChannelByIndex(currentChannelIndex);
+            const activeChannel = document.querySelector('.channel.active');
+            if (activeChannel) {
+                const prevChannel = activeChannel.previousElementSibling;
+                if (prevChannel && prevChannel.classList.contains('channel')) {
+                    prevChannel.click();
+                }
+            } else {
+                // If no channel is active, select the first one
+                const firstChannel = document.querySelector('.channel');
+                if (firstChannel) {
+                    firstChannel.click();
+                }
             }
         }
 
         function nextChannel() {
-            const playlist = document.getElementById("playlist");
-            if (currentChannelIndex < playlist.children.length - 1) {
-                currentChannelIndex++;
-                playChannelByIndex(currentChannelIndex);
+            const activeChannel = document.querySelector('.channel.active');
+            if (activeChannel) {
+                const nextChannel = activeChannel.nextElementSibling;
+                if (nextChannel && nextChannel.classList.contains('channel')) {
+                    nextChannel.click();
+                }
+            } else {
+                // If no channel is active, select the first one
+                const firstChannel = document.querySelector('.channel');
+                if (firstChannel) {
+                    firstChannel.click();
+                }
             }
         }
 
@@ -211,35 +233,37 @@
         function filterChannels() {
             const searchTerm = document.getElementById('channelSearch').value.toLowerCase();
             const channels = document.querySelectorAll('.channel');
+            let visibleIndex = 0;
 
-            channels.forEach(channel => {
+            channels.forEach((channel, index) => {
                 const channelName = channel.textContent.toLowerCase();
                 if (channelName.includes(searchTerm)) {
                     channel.style.display = '';
+                    channel.dataset.visibleIndex = visibleIndex;
+                    visibleIndex++;
                 } else {
                     channel.style.display = 'none';
                 }
             });
-        }
-
-
-        function updateChannelButtons() {
-            const playlist = document.getElementById("playlist");
-            const previousButton = document.getElementById("previous-channel-button");
-            const nextButton = document.getElementById("next-channel-button");
-
-            if (currentChannelIndex > 0) {
-                previousButton.textContent = "\\u25C0 " + (currentChannelIndex) + ". " + playlist.children[currentChannelIndex - 1].textContent;
+            
+            // Update currentChannelIndex based on visible channels
+            let visibleChannels = Array.from(document.querySelectorAll('.channel')).filter(channel => channel.style.display !== 'none');
+            if (visibleChannels.length > 0) {
+                currentChannelIndex = parseInt(visibleChannels[0].dataset.visibleIndex);
             } else {
-                previousButton.textContent = "\\u25C0 ";
-            }
-
-            if (currentChannelIndex < playlist.children.length - 1) {
-                nextButton.textContent = "\\u25B6 " + (currentChannelIndex + 2 -1) + ". " + playlist.children[currentChannelIndex + 1].textContent;
-            } else {
-                nextButton.textContent = "\\u25B6 ";
+                currentChannelIndex = -1;
             }
         }
+
+        document.addEventListener('keydown', function(event) {
+            if (event.code === 'ArrowDown') {
+                event.preventDefault(); // Prevent scrolling
+                nextChannel();
+            } else if (event.code === 'ArrowUp') {
+                event.preventDefault(); // Prevent scrolling
+                previousChannel();
+            }
+        });
     </script>
 </body>
 </html>
