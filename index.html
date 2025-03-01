@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IPTV Player con HLS.js</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f8f8f8;
+            margin: 0; /* Reset default body margin */
+        }
+
+        .container {
+            display: flex; /* Use flexbox for layout */
+            height: 100vh; /* Occupy full viewport height */
+        }
+
+        #playlist-container {
+            width: 300px; /* Fixed width for the playlist */
+            background: white;
+            padding: 20px;
+            border-right: 1px solid #ccc;
+            overflow-y: auto; /* Enable vertical scrolling */
+            position: fixed; /* Make it stick to the left */
+            height: 100vh; /* Full height */
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        #playlist {
+            text-align: left;
+        }
+
+        #player-container {
+            flex: 1; /* Take remaining space */
+            padding: 20px;
+            text-align: center;
+            margin-left: 340px; /* Account for playlist width + margin */
+        }
+
+        input, button {
+            margin: 10px;
+            padding: 10px;
+            width: 80%;
+            font-size: 16px;
+        }
+
+        .channel {
+            cursor: pointer;
+            padding: 10px;
+            border-bottom: 1px solid #ccc;
+            transition: background 0.3s ease;
+        }
+
+        .channel:hover {
+            background: #dcdcdc;
+        }
+
+        .active {
+            font-weight: bold;
+            color: #007bff;
+        }
+
+        video {
+            width: 90%;
+            max-width: 800px;
+            margin-top: 10px;
+            border-radius: 5px;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.2);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="playlist-container">
+            <h2>IPTV Player con HLS.js</h2>
+            <input type="text" id="m3uUrl" placeholder="Inserisci URL M3U">
+            <button onclick="loadPlaylist()">Carica Playlist</button>
+            <button onclick="clearPlaylist()">Cancella Playlist</button>
+            <br>
+            <input type="file" id="fileInput" accept=".m3u" onchange="loadFile(event)">
+
+            <h3>Canali disponibili</h3>
+            <div id="playlist">Nessuna playlist caricata</div>
+        </div>
+
+        <div id="player-container">
+            <h3>Player</h3>
+            <video id="player" controls></video>
+            <div id="channel-controls">
+                <button id="previous-channel-button" onclick="previousChannel()">&#9664;</button>
+                <button id="next-channel-button" onclick="nextChannel()">&#9654;</button>
+            </div>
+        </div>
+    </div>
+    <script>
+        function loadPlaylist() {
+            const url = document.getElementById('m3uUrl').value;
+            if (!url) {
+                alert("Inserisci un URL M3U valido!");
+                return;
+            }
+
+            alert("A causa di restrizioni CORS, incolla manualmente il contenuto del file M3U.");
+            const m3uContent = prompt("Incolla il contenuto del file M3U qui:");
+
+            if (m3uContent) {
+                parseM3U(m3uContent);
+                localStorage.setItem('m3uPlaylist', m3uContent);
+            } else {
+                const storedPlaylist = localStorage.getItem('m3uPlaylist');
+                if (storedPlaylist) {
+                    parseM3U(storedPlaylist);
+                }
+            }
+        }
+
+        function loadFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                parseM3U(e.target.result);
+            };
+            reader.readAsText(file);
+        }
+
+        function parseM3U(m3u) {
+            const lines = m3u.split("\n");
+            const playlistDiv = document.getElementById("playlist");
+            playlistDiv.innerHTML = "";
+
+            let name = "";
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i].trim();
+                if (line.startsWith("#EXTINF")) {
+                    name = line.split(",")[1] || "Canale Sconosciuto";
+                } else if (line.startsWith("http")) {
+                    const url = line;
+                    const div = document.createElement("div");
+                    div.className = "channel";
+                    div.textContent = name;
+                    div.onclick = () => playChannel(url, div, i);
+                    playlistDiv.appendChild(div);
+                }
+            }
+
+            if (playlistDiv.innerHTML === "") {
+                playlistDiv.innerHTML = "<p style='color: red;'>Nessun canale trovato!</p>";
+            }
+        }
+
+        function clearPlaylist() {
+            localStorage.removeItem('m3uPlaylist');
+            document.getElementById('playlist').innerHTML = "Nessuna playlist caricata";
+        }
+
+        let currentChannelIndex = -1;
+
+        function playChannel(url, element, index) {
+            const video = document.getElementById("player");
+            currentChannelIndex = index;
+            updateChannelButtons();
+
+            // Evidenzia il canale attivo
+            document.querySelectorAll(".channel").forEach(el => el.classList.remove("active"));
+            element.classList.add("active");
+
+            if (Hls.isSupported()) {
+                const hls = new Hls();
+                hls.loadSource(url);
+                hls.attachMedia(video);
+                hls.on(Hls.Events.MANIFEST_PARSED, () => video.play());
+            } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+                video.src = url;
+                video.play();
+            } else {
+                alert("Il tuo browser non supporta HLS!");
+            }
+        }
+
+        function previousChannel() {
+            if (currentChannelIndex > 0) {
+                currentChannelIndex--;
+                playChannelByIndex(currentChannelIndex);
+            }
+        }
+
+        function nextChannel() {
+            const playlist = document.getElementById("playlist");
+            if (currentChannelIndex < playlist.children.length - 1) {
+                currentChannelIndex++;
+                playChannelByIndex(currentChannelIndex);
+            }
+        }
+
+        function playChannelByIndex(index) {
+            const playlist = document.getElementById("playlist");
+            const channel = playlist.children[index];
+            if (channel) {
+                channel.click();
+            }
+        }
+
+        function updateChannelButtons() {
+            const playlist = document.getElementById("playlist");
+            const previousButton = document.getElementById("previous-channel-button");
+            const nextButton = document.getElementById("next-channel-button");
+
+            if (currentChannelIndex > 0) {
+                previousButton.textContent = "\\u25C0 " + (currentChannelIndex) + ". " + playlist.children[currentChannelIndex - 1].textContent;
+            } else {
+                previousButton.textContent = "\\u25C0 ";
+            }
+
+            if (currentChannelIndex < playlist.children.length - 1) {
+                nextButton.textContent = "\\u25B6 " + (currentChannelIndex + 2 -1) + ". " + playlist.children[currentChannelIndex + 1].textContent;
+            } else {
+                nextButton.textContent = "\\u25B6 ";
+            }
+        }
+    </script>
+</body>
+</html>
