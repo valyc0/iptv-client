@@ -8,8 +8,9 @@
     <style>
         body {
             font-family: Arial, sans-serif;
-            background-color: #f8f8f8;
+            background-color: #000000;
             margin: 0; /* Reset default body margin */
+            color: #ffffff;
         }
 
         .container {
@@ -19,13 +20,13 @@
 
         #playlist-container {
             width: 300px; /* Fixed width for the playlist */
-            background: white;
+            background: #1a1a1a;
             padding: 20px;
-            border-right: 1px solid #ccc;
+            border-right: 1px solid #333;
             overflow-y: auto; /* Enable vertical scrolling */
             position: fixed; /* Make it stick to the left */
             height: 100vh; /* Full height */
-            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.5);
         }
 
         #playlist {
@@ -37,6 +38,7 @@
             padding: 20px;
             text-align: center;
             margin-left: 340px; /* Account for playlist width + margin */
+            background: #000000;
         }
 
         input, button {
@@ -44,22 +46,41 @@
             padding: 10px;
             width: 80%;
             font-size: 16px;
+            background: #333;
+            border: 1px solid #444;
+            color: white;
+            border-radius: 4px;
+        }
+
+        input::placeholder {
+            color: #aaa;
+        }
+
+        button {
+            background: #1a1a1a;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #444;
         }
 
         .channel {
             cursor: pointer;
             padding: 10px;
-            border-bottom: 1px solid #ccc;
+            border-bottom: 1px solid #333;
             transition: background 0.3s ease;
+            color: #fff;
         }
 
         .channel:hover {
-            background: #dcdcdc;
+            background: #2a2a2a;
         }
 
         .active {
             font-weight: bold;
-            color: #007bff;
+            color: #3a9bff;
+            background: #2a2a2a;
         }
 
         video {
@@ -82,11 +103,12 @@
                 height: auto;
                 position: relative;
                 border-right: none;
-                border-top: 1px solid #ccc;
+                border-top: 1px solid #333;
                 max-height: 150px;
                 padding: 10px;
                 overflow-x: auto;
                 white-space: nowrap;
+                background: #000;
             }
 
             #playlist {
@@ -99,11 +121,12 @@
                 display: inline-block;
                 min-width: 200px;
                 white-space: normal;
-                background: #f5f5f5;
-                border: 1px solid #ddd;
+                background: #1a1a1a;
+                border: 1px solid #333;
                 border-radius: 5px;
                 margin-right: 10px;
                 padding: 10px;
+                color: #fff;
             }
 
             #player-container {
@@ -131,7 +154,7 @@
         #current-channel-name {
             margin-top: 10px;
             font-size: 18px;
-            color: #333;
+            color: #fff;
         }
     </style>
 </head>
