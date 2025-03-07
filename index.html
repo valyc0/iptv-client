@@ -245,7 +245,8 @@
             <button onclick="clearPlaylist()">Cancella Playlist</button>
             <br>
             <input type="file" id="fileInput" accept=".m3u" onchange="loadFile(event)">
-            <div style="margin: 15px 0; text-align: right; padding-right: 20px;">
+            <div style="margin: 15px 0; display: flex; justify-content: flex-end; align-items: center; padding-right: 20px;">
+                <span style="margin-right: 10px; color: #fff;">Preferiti</span>
                 <label class="switch">
                     <input type="checkbox" id="favorites-switch">
                     <span class="slider round"></span>
@@ -385,27 +386,69 @@
                 addToFavorites(name, url, index);
             }
 
+            // Store current channel info for potential restart
+            window.currentChannel = { url, element, index, name };
+
+            // Clear any existing stall detection
+            if (window.stallTimeout) {
+                clearTimeout(window.stallTimeout);
+            }
+
             if (Hls.isSupported()) {
                 if (window.currentHls) {
                     window.currentHls.destroy();
                 }
-                const hls = new Hls();
+                const hls = new Hls({
+                    manifestLoadingTimeOut: 20000,
+                    manifestLoadingMaxRetry: 3,
+                    manifestLoadingRetryDelay: 500,
+                    levelLoadingTimeOut: 20000,
+                    levelLoadingMaxRetry: 3,
+                    levelLoadingRetryDelay: 500
+                });
                 window.currentHls = hls;
+
+                // Add error handling
+                hls.on(Hls.Events.ERROR, function(event, data) {
+                    if (data.fatal) {
+                        switch (data.type) {
+                            case Hls.ErrorTypes.NETWORK_ERROR:
+                                console.log('Network error, trying to recover...');
+                                hls.startLoad();
+                                break;
+                            case Hls.ErrorTypes.MEDIA_ERROR:
+                                console.log('Media error, trying to recover...');
+                                hls.recoverMediaError();
+                                break;
+                            default:
+                                // Cannot recover
+                                console.log('Fatal error, restarting stream...');
+                                restartStream();
+                                break;
+                        }
+                    }
+                });
+
                 hls.loadSource(url);
                 hls.attachMedia(video);
                 hls.on(Hls.Events.MANIFEST_PARSED, function() {
                     video.play().catch(function(error) {
                         console.log("Play failed:", error);
+                        setTimeout(restartStream, 2000);
                     });
                 });
             } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
                 video.src = url;
                 video.play().catch(function(error) {
                     console.log("Play failed:", error);
+                    setTimeout(restartStream, 2000);
                 });
             } else {
                 alert("Il tuo browser non supporta HLS!");
             }
+
+            // Add stall detection
+            setupStallDetection(video);
         }
 
         function previousChannel() {
@@ -471,6 +514,70 @@
             } else {
                 currentChannelIndex = -1;
             }
+        }
+
+        // Stream recovery functions
+        function restartStream() {
+            if (window.currentChannel) {
+                const { url, element, index, name } = window.currentChannel;
+                // Destroy current HLS instance
+                if (window.currentHls) {
+                    window.currentHls.destroy();
+                    window.currentHls = null;
+                }
+                // Restart after a short delay
+                setTimeout(() => {
+                    playChannel(url, element, index, name);
+                }, 1000);
+            }
+        }
+
+        function setupStallDetection(video) {
+            let stallCount = 0;
+            const maxStallCount = 3;
+            let lastTime = 0;
+            let stallTimeout;
+
+            function checkStall() {
+                if (video.currentTime === lastTime && !video.paused) {
+                    stallCount++;
+                    console.log('Stall detected:', stallCount);
+                    if (stallCount >= maxStallCount) {
+                        console.log('Multiple stalls detected, restarting stream...');
+                        restartStream();
+                        stallCount = 0;
+                    }
+                } else {
+                    stallCount = 0;
+                }
+                lastTime = video.currentTime;
+            }
+
+            // Clear any existing interval
+            if (window.stallInterval) {
+                clearInterval(window.stallInterval);
+            }
+
+            // Set up new monitoring
+            window.stallInterval = setInterval(checkStall, 3000);
+
+            // Monitor stall events
+            video.addEventListener('stalled', () => {
+                console.log('Stream stalled');
+                if (stallTimeout) clearTimeout(stallTimeout);
+                stallTimeout = setTimeout(restartStream, 10000); // Wait 10s before restarting
+            });
+
+            video.addEventListener('playing', () => {
+                if (stallTimeout) clearTimeout(stallTimeout);
+            });
+
+            // Monitor buffering
+            video.addEventListener('waiting', () => {
+                console.log('Stream buffering');
+                if (stallTimeout) clearTimeout(stallTimeout);
+                stallTimeout = setTimeout(restartStream, 10000); // Wait 10s before restarting
+            });
         }
 
         document.addEventListener('keydown', function(event) {
