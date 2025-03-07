@@ -156,6 +156,84 @@
             font-size: 18px;
             color: #fff;
         }
+
+        #favorites-container {
+            margin: 15px 0;
+        }
+
+        #favorites-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .favorite-button {
+            background: #2a2a2a;
+            color: #fff;
+            padding: 8px;
+            border: 1px solid #444;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 80%;
+            margin: 5px auto;
+        }
+
+        .favorite-button:hover {
+            background: #3a3a3a;
+        }
+
+        .favorites-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 10px;
+        }
+
+        /* Switch style */
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 24px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #333;
+            transition: .4s;
+            border-radius: 24px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: #3a9bff;
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
     </style>
 </head>
 <body>
@@ -167,6 +245,12 @@
             <button onclick="clearPlaylist()">Cancella Playlist</button>
             <br>
             <input type="file" id="fileInput" accept=".m3u" onchange="loadFile(event)">
+            <div style="margin: 15px 0; text-align: right; padding-right: 20px;">
+                <label class="switch">
+                    <input type="checkbox" id="favorites-switch">
+                    <span class="slider round"></span>
+                </label>
+            </div>
             <input type="text" id="channelSearch" placeholder="Cerca canale">
         
             <h3>Canali disponibili</h3>
@@ -177,6 +261,10 @@
             <h3>Player</h3>
             <video id="player" controls></video>
             <h3 id="current-channel-name"></h3>
+            <div id="video-favorites-container" style="margin-top: 20px;">
+                <div id="video-favorites-buttons" style="display: flex; justify-content: center; gap: 15px;">
+                </div>
+            </div>
         </div>
     </div>
     <script>
@@ -223,11 +311,16 @@
                     name = line.split(",")[1] || "Canale Sconosciuto";
                 } else if (line.startsWith("http")) {
                     const url = line;
-                    const div = document.createElement("div");
-                    div.className = "channel";
-                    div.textContent = name;
-                    div.onclick = () => playChannel(url, div, i);
-                    playlistDiv.appendChild(div);
+                    const channelContainer = document.createElement("div");
+                    channelContainer.className = "channel";
+                    channelContainer.textContent = name;
+                    // Store the channel name as a data attribute
+                    channelContainer.dataset.channelName = name;
+                    channelContainer.onclick = function() {
+                        const channelName = this.dataset.channelName;
+                        playChannel(url, this, i, channelName);
+                    };
+                    playlistDiv.appendChild(channelContainer);
                 }
             }
 
@@ -257,6 +350,8 @@
             document.getElementById('playlist').innerHTML = "Nessuna playlist caricata";
             document.getElementById('m3uUrl').value = '';
             document.getElementById('current-channel-name').textContent = '';
+            document.getElementById('favorites-buttons').innerHTML = '';
+            favorites = []; // Reset favorites array
             const video = document.getElementById('player');
             video.pause();
             video.src = '';
@@ -264,7 +359,7 @@
 
         let currentChannelIndex = -1;
 
-        function playChannel(url, element, index) {
+        function playChannel(url, element, index, name) {
             const video = document.getElementById("player");
             currentChannelIndex = index;
 
@@ -273,19 +368,41 @@
             element.classList.add("active");
 
             // Update channel name display
-            document.getElementById('current-channel-name').textContent = element.textContent;
+            const channelName = document.getElementById('current-channel-name');
+            channelName.textContent = name;
+            channelName.style.fontSize = '24px';
+            channelName.style.marginTop = '20px';
+            channelName.style.color = '#3a9bff';
 
-            // Scroll channel into view
-            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            // Scroll channel into view if it's not a favorite button
+            if (!element.classList.contains('favorite-button')) {
+                element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+
+            // Check if favorites mode is on and add to favorites
+            const favoritesSwitch = document.getElementById('favorites-switch');
+            if (favoritesSwitch.checked) {
+                addToFavorites(name, url, index);
+            }
 
             if (Hls.isSupported()) {
+                if (window.currentHls) {
+                    window.currentHls.destroy();
+                }
                 const hls = new Hls();
+                window.currentHls = hls;
                 hls.loadSource(url);
                 hls.attachMedia(video);
-                hls.on(Hls.Events.MANIFEST_PARSED, () => video.play());
+                hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                    video.play().catch(function(error) {
+                        console.log("Play failed:", error);
+                    });
+                });
             } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
                 video.src = url;
-                video.play();
+                video.play().catch(function(error) {
+                    console.log("Play failed:", error);
+                });
             } else {
                 alert("Il tuo browser non supporta HLS!");
             }
@@ -363,6 +480,114 @@
             } else if (event.code === 'ArrowUp') {
                 event.preventDefault(); // Prevent scrolling
                 previousChannel();
+            }
+        });
+
+        // Gestione preferiti
+        let favorites = JSON.parse(localStorage.getItem('favorites') || '[]');
+
+        function removeFavorite(url) {
+            favorites = favorites.filter(f => f.url !== url);
+            localStorage.setItem('favorites', JSON.stringify(favorites));
+            updateFavoritesButtons();
+        }
+
+        function updateFavoritesButtons() {
+            const videoContainer = document.getElementById('video-favorites-buttons');
+            videoContainer.innerHTML = '';
+            videoContainer.style.display = 'flex';
+            videoContainer.style.justifyContent = 'center';
+            videoContainer.style.gap = '20px';
+            
+            const favoritesSwitch = document.getElementById('favorites-switch');
+            const showDeleteButtons = favoritesSwitch.checked;
+            
+            favorites.forEach((fav, index) => {
+                const videoWrapper = document.createElement('div');
+                videoWrapper.style.display = 'flex';
+                videoWrapper.style.flexDirection = 'column';
+                videoWrapper.style.alignItems = 'center';
+                videoWrapper.style.gap = '5px';
+
+                const videoBtn = document.createElement('button');
+                videoBtn.className = 'favorite-button';
+                videoBtn.style.width = 'auto';
+                videoBtn.style.margin = '0';
+                videoBtn.style.padding = '10px 20px';
+                videoBtn.textContent = fav.name;
+                videoBtn.dataset.channelName = fav.name;
+                videoBtn.onclick = function() {
+                    const channelName = this.dataset.channelName;
+                    playChannel(fav.url, this, fav.index, channelName);
+                };
+
+                videoWrapper.appendChild(videoBtn);
+
+                if (showDeleteButtons) {
+                    const videoDeleteBtn = document.createElement('button');
+                    videoDeleteBtn.style.padding = '5px 10px';
+                    videoDeleteBtn.style.marginTop = '-3px';
+                    videoDeleteBtn.innerHTML = '🗑️';
+                    videoDeleteBtn.onclick = () => removeFavorite(fav.url);
+                    videoWrapper.appendChild(videoDeleteBtn);
+                }
+
+                videoContainer.appendChild(videoWrapper);
+            });
+        }
+
+        function addToFavorites(name, url, index) {
+            // Check if the channel is already in favorites
+            if (favorites.some(f => f.url === url)) {
+                return;
+            }
+            
+            // If we have 3 favorites, remove the first one (oldest)
+            if (favorites.length >= 3) {
+                favorites.shift();
+            }
+            
+            // Add the new favorite
+            favorites.push({ name, url, index });
+            localStorage.setItem('favorites', JSON.stringify(favorites));
+            updateFavoritesButtons();
+        }
+
+        // Initialize HLS instance
+        window.currentHls = null;
+
+        // Carica i preferiti salvati all'avvio e avvia il primo preferito
+        document.addEventListener('DOMContentLoaded', async function() {
+            // Load favorites from localStorage
+            favorites = JSON.parse(localStorage.getItem('favorites') || '[]');
+            
+            // Add event listener to favorites switch
+            const favoritesSwitch = document.getElementById('favorites-switch');
+            favoritesSwitch.addEventListener('change', updateFavoritesButtons);
+            
+            updateFavoritesButtons();
+
+            // Load stored playlist if it exists
+            const storedPlaylist = localStorage.getItem('m3uPlaylist');
+            const storedUrl = localStorage.getItem('m3uUrl');
+            if (storedPlaylist) {
+                console.log('Loading saved playlist...');
+                parseM3U(storedPlaylist);
+                if (storedUrl) {
+                    document.getElementById('m3uUrl').value = storedUrl;
+                }
+
+                // Start the first favorite if exists
+                if (favorites.length > 0) {
+                    const firstFav = favorites[0];
+                    setTimeout(() => {
+                        const videoContainer = document.getElementById('video-favorites-buttons');
+                        const firstFavBtn = videoContainer.querySelector('.favorite-button');
+                        if (firstFavBtn) {
+                            playChannel(firstFav.url, firstFavBtn, firstFav.index, firstFav.name);
+                        }
+                    }, 500); // Give more time for HLS.js to initialize
+                }
             }
         });
     </script>
