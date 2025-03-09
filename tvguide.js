@@ -25,7 +25,7 @@ class TvGuide {
             'QVC': { number: 32, url: 'programmi_stasera_qvc.html' },
             'Food Network': { number: 33, url: 'programmi_stasera_food_network.html' },
             'Cine34': { number: 34, url: 'programmi_stasera_cine34.html' },
-            'Focus': { number: 35, url: 'programmi_stasera_focus.html' },
+            'Focus': { number: 35, url: 'programmi_stasera_focustv.html' },
             'RTL 102.5': { number: 36, url: 'programmi_stasera_rtl1025.html' },
             'Warner TV': { number: 37, url: 'programmi_stasera_warnertv.html' },
             'Giallo': { number: 38, url: 'programmi_stasera_giallo.html' },
