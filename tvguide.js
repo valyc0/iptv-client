@@ -23,7 +23,7 @@ class TvGuide {
             'La 5': { number: 30, url: 'programmi_stasera_la5.html' },
             'Real Time': { number: 31, url: 'programmi_stasera_realtime.html' },
             'QVC': { number: 32, url: 'programmi_stasera_qvc.html' },
-            'Food Network': { number: 33, url: 'programmi_stasera_foodnetwork.html' },
+            'Food Network': { number: 33, url: 'programmi_stasera_food_network.html' },
             'Cine34': { number: 34, url: 'programmi_stasera_cine34.html' },
             'Focus': { number: 35, url: 'programmi_stasera_focus.html' },
             'RTL 102.5': { number: 36, url: 'programmi_stasera_rtl1025.html' },
