@@ -262,13 +262,19 @@
             <h3>Player</h3>
             <video id="player" controls></video>
             <h3 id="current-channel-name"></h3>
+            <div id="program-info" style="margin-top: 10px; color: #fff;">
+                <div id="current-program"></div>
+                <div id="next-program"></div>
+            </div>
             <div id="video-favorites-container" style="margin-top: 20px;">
                 <div id="video-favorites-buttons" style="display: flex; justify-content: center; gap: 15px;">
                 </div>
             </div>
         </div>
     </div>
-    <script>
+    <script type="module">
+        import TvGuide from './tvguide.js';
+        const tvGuide = new TvGuide();
         function loadPlaylist() {
             const url = document.getElementById('m3uUrl').value;
             if (!url) {
@@ -360,7 +366,7 @@
 
         let currentChannelIndex = -1;
 
-        function playChannel(url, element, index, name) {
+        async function playChannel(url, element, index, name) {
             const video = document.getElementById("player");
             currentChannelIndex = index;
 
@@ -374,6 +380,33 @@
             channelName.style.fontSize = '24px';
             channelName.style.marginTop = '20px';
             channelName.style.color = '#3a9bff';
+
+            // Fetch and display program information
+            const currentProgramDiv = document.getElementById('current-program');
+            const nextProgramDiv = document.getElementById('next-program');
+            
+            currentProgramDiv.innerHTML = 'Caricamento programmi in corso...';
+            nextProgramDiv.innerHTML = '';
+            
+            try {
+                const programInfo = await tvGuide.getCurrentProgram(name);
+                
+                if (programInfo.current) {
+                    currentProgramDiv.innerHTML = `<strong>In onda ora (${programInfo.current.time}):</strong> ${programInfo.current.title}`;
+                    
+                    if (programInfo.next) {
+                        nextProgramDiv.innerHTML = `<strong>A seguire (${programInfo.next.time}):</strong> ${programInfo.next.title}`;
+                    }
+                }
+            } catch (error) {
+                console.error('Errore nel recupero informazioni programma:', error);
+                if (error.message.includes('Canale non supportato')) {
+                    currentProgramDiv.innerHTML = 'Guida TV non disponibile per questo canale';
+                } else {
+                    currentProgramDiv.innerHTML = 'Errore nel recupero delle informazioni programma';
+                }
+                nextProgramDiv.innerHTML = '';
+            }
 
             // Scroll channel into view if it's not a favorite button
             if (!element.classList.contains('favorite-button')) {
