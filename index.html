@@ -235,6 +235,51 @@
             transform: translateX(26px);
         }
     </style>
+    <script>
+        // Global functions for playlist management
+        function loadFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const content = e.target.result;
+                window.parseM3U(content);
+                // Save the loaded playlist to localStorage
+                localStorage.setItem('m3uPlaylist', content);
+            };
+            reader.readAsText(file);
+        }
+
+        function loadPlaylist() {
+            const url = document.getElementById('m3uUrl').value;
+            if (!url) {
+                alert("Inserisci un URL M3U valido!");
+                return;
+            }
+
+            alert("A causa di restrizioni CORS, incolla manualmente il contenuto del file M3U.");
+            const m3uContent = prompt("Incolla il contenuto del file M3U qui:");
+
+            if (m3uContent) {
+                window.parseM3U(m3uContent);
+                localStorage.setItem('m3uPlaylist', m3uContent);
+                localStorage.setItem('m3uUrl', url);
+            }
+        }
+
+        function clearPlaylist() {
+            localStorage.clear(); // Clear all stored data
+            document.getElementById('playlist').innerHTML = "Nessuna playlist caricata";
+            document.getElementById('m3uUrl').value = '';
+            document.getElementById('current-channel-name').textContent = '';
+            document.getElementById('favorites-buttons').innerHTML = '';
+            window.favorites = []; // Reset favorites array
+            const video = document.getElementById('player');
+            video.pause();
+            video.src = '';
+        }
+    </script>
 </head>
 <body>
     <div class="container">
@@ -275,36 +320,12 @@
     <script type="module">
         import TvGuide from './tvguide.js';
         const tvGuide = new TvGuide();
-        function loadPlaylist() {
-            const url = document.getElementById('m3uUrl').value;
-            if (!url) {
-                alert("Inserisci un URL M3U valido!");
-                return;
-            }
 
-            alert("A causa di restrizioni CORS, incolla manualmente il contenuto del file M3U.");
-            const m3uContent = prompt("Incolla il contenuto del file M3U qui:");
-
-            if (m3uContent) {
-                parseM3U(m3uContent);
-                localStorage.setItem('m3uPlaylist', m3uContent);
-                localStorage.setItem('m3uUrl', url);
-            }
-        }
-
-        function loadFile(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-            
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const content = e.target.result;
-                parseM3U(content);
-                // Save the loaded playlist to localStorage
-                localStorage.setItem('m3uPlaylist', content);
-            };
-            reader.readAsText(file);
-        }
+        // Initialize globals
+        window.favorites = JSON.parse(localStorage.getItem('favorites') || '[]');
+        
+        // Make parseM3U globally accessible
+        window.parseM3U = parseM3U;
 
         function parseM3U(m3u) {
             const lines = m3u.split("\n");
@@ -352,17 +373,6 @@
             }
         });
 
-        function clearPlaylist() {
-            localStorage.clear(); // Clear all stored data
-            document.getElementById('playlist').innerHTML = "Nessuna playlist caricata";
-            document.getElementById('m3uUrl').value = '';
-            document.getElementById('current-channel-name').textContent = '';
-            document.getElementById('favorites-buttons').innerHTML = '';
-            favorites = []; // Reset favorites array
-            const video = document.getElementById('player');
-            video.pause();
-            video.src = '';
-        }
 
         let currentChannelIndex = -1;
 
