@@ -274,23 +274,26 @@
         }
 
         function clearPlaylist() {
-            localStorage.clear(); // Clear all stored data
-            document.getElementById('playlist').innerHTML = "Nessuna playlist caricata";
-            const m3uUrl = document.getElementById('m3uUrl');
-            m3uUrl.value = '';
-            m3uUrl.style.display = '';
-            document.getElementById('fileInput').style.display = '';
-            document.querySelector('button[onclick="loadPlaylist()"]').style.display = '';
-            document.getElementById('current-channel-name').textContent = '';
-            // Clear all favorites
-            document.getElementById('favorites-buttons').innerHTML = '';
-            document.getElementById('video-favorites-buttons').innerHTML = '';
-            window.favorites = []; // Reset favorites array
-            localStorage.removeItem('favorites'); // Remove from storage
-            updateFavoritesButtons(); // Update UI
-            const video = document.getElementById('player');
-            video.pause();
-            video.src = '';
+                    localStorage.clear(); // Clear all stored data
+                    document.getElementById('playlist').innerHTML = "Nessuna playlist caricata";
+                    const m3uUrl = document.getElementById('m3uUrl');
+                    m3uUrl.value = '';
+                    m3uUrl.style.display = '';
+                    document.getElementById('fileInput').style.display = '';
+                    document.querySelector('button[onclick="loadPlaylist()"]').style.display = '';
+                    document.getElementById('current-channel-name').textContent = '';
+                    // Clear all favorites
+                    document.getElementById('favorites-buttons').innerHTML = '';
+                    document.getElementById('video-favorites-buttons').innerHTML = '';
+                    window.favorites = []; // Reset favorites array
+                    favorites = []; // Reset global favorites array
+                    localStorage.removeItem('favorites'); // Remove from storage
+                    updateFavoritesButtons(); // Update UI
+                    // Reset favorites switch
+                    document.getElementById('favorites-switch').checked = false;
+                    const video = document.getElementById('player');
+                    video.pause();
+                    video.src = '';
         }
     </script>
 </head>
@@ -335,8 +338,10 @@
         const tvGuide = new TvGuide();
 
         // Initialize globals
-        window.favorites = JSON.parse(localStorage.getItem('favorites') || '[]');
-        
+        // Initialize globals
+        window.favorites = [];
+        window.currentChannelIndex = -1;
+
         // Make parseM3U globally accessible
         window.parseM3U = parseM3U;
 function parseM3U(m3u) {
@@ -392,11 +397,9 @@ function parseM3U(m3u) {
         });
 
 
-        let currentChannelIndex = -1;
-
         async function playChannel(url, element, index, name) {
             const video = document.getElementById("player");
-            currentChannelIndex = index;
+            window.currentChannelIndex = index;
 
             // Evidenzia il canale attivo
             document.querySelectorAll(".channel").forEach(el => el.classList.remove("active"));
@@ -652,11 +655,9 @@ function parseM3U(m3u) {
         });
 
         // Gestione preferiti
-        let favorites = JSON.parse(localStorage.getItem('favorites') || '[]');
-
         function removeFavorite(url) {
-            favorites = favorites.filter(f => f.url !== url);
-            localStorage.setItem('favorites', JSON.stringify(favorites));
+            window.favorites = window.favorites.filter(f => f.url !== url);
+            localStorage.setItem('favorites', JSON.stringify(window.favorites));
             updateFavoritesButtons();
         }
 
@@ -670,7 +671,7 @@ function parseM3U(m3u) {
             const favoritesSwitch = document.getElementById('favorites-switch');
             const showDeleteButtons = favoritesSwitch.checked;
             
-            favorites.forEach((fav, index) => {
+            window.favorites.forEach((fav, index) => {
                 const videoWrapper = document.createElement('div');
                 videoWrapper.style.display = 'flex';
                 videoWrapper.style.flexDirection = 'column';
@@ -706,35 +707,39 @@ function parseM3U(m3u) {
 
         function addToFavorites(name, url, index) {
             // Check if the channel is already in favorites
-            if (favorites.some(f => f.url === url)) {
+            if (window.favorites.some(f => f.url === url)) {
                 return;
             }
             
             // If we have 3 favorites, remove the first one (oldest)
-            if (favorites.length >= 3) {
-                favorites.shift();
+            if (window.favorites.length >= 3) {
+                window.favorites.shift();
             }
             
             // Add the new favorite
-            favorites.push({ name, url, index });
-            localStorage.setItem('favorites', JSON.stringify(favorites));
+            window.favorites.push({ name, url, index });
+            localStorage.setItem('favorites', JSON.stringify(window.favorites));
             updateFavoritesButtons();
         }
 
         // Initialize HLS instance
         window.currentHls = null;
 
-        // Carica i preferiti salvati all'avvio e avvia il primo preferito
+        // Initialize on page load
         document.addEventListener('DOMContentLoaded', async function() {
-            // Load favorites from localStorage
-            favorites = JSON.parse(localStorage.getItem('favorites') || '[]');
-            
             // Add event listener to favorites switch
             const favoritesSwitch = document.getElementById('favorites-switch');
             favoritesSwitch.addEventListener('change', updateFavoritesButtons);
             
-            updateFavoritesButtons();
-
+            // Add event listener for Enter key on m3uUrl input
+            const m3uUrlInput = document.getElementById('m3uUrl');
+            m3uUrlInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault(); // Prevent form submission
+                    loadPlaylist();
+                }
+            });
+            
             // Load stored playlist if it exists
             const storedPlaylist = localStorage.getItem('m3uPlaylist');
             const storedUrl = localStorage.getItem('m3uUrl');
@@ -743,18 +748,6 @@ function parseM3U(m3u) {
                 parseM3U(storedPlaylist);
                 if (storedUrl) {
                     document.getElementById('m3uUrl').value = storedUrl;
-                }
-
-                // Start the first favorite if exists
-                if (favorites.length > 0) {
-                    const firstFav = favorites[0];
-                    setTimeout(() => {
-                        const videoContainer = document.getElementById('video-favorites-buttons');
-                        const firstFavBtn = videoContainer.querySelector('.favorite-button');
-                        if (firstFavBtn) {
-                            playChannel(firstFav.url, firstFavBtn, firstFav.index, firstFav.name);
-                        }
-                    }, 500); // Give more time for HLS.js to initialize
                 }
             }
         });
