@@ -251,20 +251,25 @@
             reader.readAsText(file);
         }
 
-        function loadPlaylist() {
+        async function loadPlaylist() {
             const url = document.getElementById('m3uUrl').value;
             if (!url) {
                 alert("Inserisci un URL M3U valido!");
                 return;
             }
 
-            alert("A causa di restrizioni CORS, incolla manualmente il contenuto del file M3U.");
-            const m3uContent = prompt("Incolla il contenuto del file M3U qui:");
-
-            if (m3uContent) {
+            try {
+                const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+                const response = await fetch(proxyUrl);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                const m3uContent = await response.text();
                 window.parseM3U(m3uContent);
                 localStorage.setItem('m3uPlaylist', m3uContent);
                 localStorage.setItem('m3uUrl', url);
+            } catch (error) {
+                alert("Errore nel caricamento della playlist: " + error.message);
             }
         }
 
@@ -286,7 +291,7 @@
         <div id="playlist-container">
             <h2>IPTV Player con HLS.js</h2>
             <input type="text" id="m3uUrl" placeholder="Inserisci URL M3U">
-            <button onclick="loadPlaylist()">Carica Playlist</button>
+            <button onclick="loadPlaylist()">Carica Playlist da URL</button>
             <button onclick="clearPlaylist()">Cancella Playlist</button>
             <br>
             <input type="file" id="fileInput" accept=".m3u" onchange="loadFile(event)">

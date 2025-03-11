@@ -1,4 +1,17 @@
 class TvGuide {
+    static async fetchM3uPlaylist(url) {
+        try {
+            const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+            const response = await fetch(proxyUrl);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            return await response.text();
+        } catch (error) {
+            throw new Error('Errore nel caricamento della playlist: ' + error.message);
+        }
+    }
+
     constructor() {
         this.channelUrls = {
             'Rai 1': { number: 1, url: 'programmi_stasera_rai1.html' },
