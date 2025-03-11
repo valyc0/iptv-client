@@ -276,10 +276,18 @@
         function clearPlaylist() {
             localStorage.clear(); // Clear all stored data
             document.getElementById('playlist').innerHTML = "Nessuna playlist caricata";
-            document.getElementById('m3uUrl').value = '';
+            const m3uUrl = document.getElementById('m3uUrl');
+            m3uUrl.value = '';
+            m3uUrl.style.display = '';
+            document.getElementById('fileInput').style.display = '';
+            document.querySelector('button[onclick="loadPlaylist()"]').style.display = '';
             document.getElementById('current-channel-name').textContent = '';
+            // Clear all favorites
             document.getElementById('favorites-buttons').innerHTML = '';
+            document.getElementById('video-favorites-buttons').innerHTML = '';
             window.favorites = []; // Reset favorites array
+            localStorage.removeItem('favorites'); // Remove from storage
+            updateFavoritesButtons(); // Update UI
             const video = document.getElementById('player');
             video.pause();
             video.src = '';
@@ -331,11 +339,16 @@
         
         // Make parseM3U globally accessible
         window.parseM3U = parseM3U;
+function parseM3U(m3u) {
+    const lines = m3u.split("\n");
+    const playlistDiv = document.getElementById("playlist");
+    playlistDiv.innerHTML = "";
+    
+    // Hide input elements after playlist is loaded
+    document.getElementById('m3uUrl').style.display = 'none';
+    document.getElementById('fileInput').style.display = 'none';
+    document.querySelector('button[onclick="loadPlaylist()"]').style.display = 'none';
 
-        function parseM3U(m3u) {
-            const lines = m3u.split("\n");
-            const playlistDiv = document.getElementById("playlist");
-            playlistDiv.innerHTML = "";
 
             let name = "";
             for (let i = 0; i < lines.length; i++) {
