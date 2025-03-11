@@ -2,6 +2,7 @@ export class Playlist {
     constructor(player) {
         this.player = player;
         this.favorites = [];
+        this.toggleButton = null;
         this.setupEventListeners();
         this.loadStoredPlaylist();
     }
@@ -31,6 +32,14 @@ export class Playlist {
         // Search input handler
         const searchInput = document.getElementById('channelSearch');
         searchInput.addEventListener('input', () => this.filterChannels());
+
+        // Setup video favorites container and toggle button
+        const videoContainer = document.getElementById('video-favorites-buttons');
+        videoContainer.style.display = 'flex';
+        videoContainer.style.justifyContent = 'center';
+        videoContainer.style.gap = '20px';
+        
+        this.createToggleButton(videoContainer);
 
         // Load stored favorites
         const storedFavorites = localStorage.getItem('favorites');
@@ -105,6 +114,12 @@ export class Playlist {
         channelContainer.onclick = () => {
             this.player.play(url, channelContainer, index, name);
             
+            // Update toggle button state whenever a channel is played
+            if (this.toggleButton) {
+                this.toggleButton.disabled = !this.player.previousClickedFavorite;
+                this.toggleButton.style.opacity = this.player.previousClickedFavorite ? '1' : '0.5';
+            }
+            
             const favoritesSwitch = document.getElementById('favorites-switch');
             if (favoritesSwitch.checked) {
                 this.addToFavorites(name, url, index);
@@ -162,12 +177,17 @@ export class Playlist {
 
     updateFavoritesButtons() {
         const videoContainer = document.getElementById('video-favorites-buttons');
+        const oldToggle = this.toggleButton ? this.toggleButton.parentElement : null;
         videoContainer.innerHTML = '';
         videoContainer.style.display = 'flex';
         videoContainer.style.justifyContent = 'center';
         videoContainer.style.gap = '20px';
 
-        this.createToggleButton(videoContainer);
+        // Restore toggle button if it exists
+        if (oldToggle) {
+            videoContainer.appendChild(oldToggle);
+        }
+
         this.createFavoriteButtons(videoContainer);
     }
 
@@ -191,6 +211,9 @@ export class Playlist {
         
         toggleWrapper.appendChild(toggleBtn);
         container.appendChild(toggleWrapper);
+        
+        // Store reference to toggle button
+        this.toggleButton = toggleBtn;
     }
 
     createFavoriteButtons(container) {
@@ -246,10 +269,16 @@ export class Playlist {
         
         document.getElementById('favorites-buttons').innerHTML = '';
         document.getElementById('video-favorites-buttons').innerHTML = '';
+
+        // Update toggle button state
+        if (this.toggleButton) {
+            this.toggleButton.disabled = true;
+            this.toggleButton.style.opacity = '0.5';
+        }
         
         this.favorites = [];
         localStorage.removeItem('favorites');
-        this.updateFavoritesButtons();
+        this.createFavoriteButtons(document.getElementById('video-favorites-buttons'));
         
         document.getElementById('favorites-switch').checked = false;
         
