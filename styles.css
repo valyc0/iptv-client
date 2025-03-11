@@ -1,0 +1,236 @@
+/* Base styles */
+body {
+    font-family: Arial, sans-serif;
+    background-color: #000000;
+    margin: 0;
+    color: #ffffff;
+}
+
+.container {
+    display: flex;
+    height: 100vh;
+}
+
+/* Playlist styles */
+#playlist-container {
+    width: 300px;
+    background: #1a1a1a;
+    padding: 20px;
+    border-right: 1px solid #333;
+    overflow-y: auto;
+    position: fixed;
+    height: 100vh;
+    box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.5);
+}
+
+#playlist {
+    text-align: left;
+}
+
+/* Player styles */
+#player-container {
+    flex: 1;
+    padding: 20px;
+    text-align: center;
+    margin-left: 340px;
+    background: #000000;
+}
+
+/* Form elements */
+input, button {
+    margin: 10px;
+    padding: 10px;
+    width: 80%;
+    font-size: 16px;
+    background: #333;
+    border: 1px solid #444;
+    color: white;
+    border-radius: 4px;
+}
+
+input::placeholder {
+    color: #aaa;
+}
+
+button {
+    background: #1a1a1a;
+    cursor: pointer;
+}
+
+button:hover {
+    background: #444;
+}
+
+/* Channel styles */
+.channel {
+    cursor: pointer;
+    padding: 10px;
+    border-bottom: 1px solid #333;
+    transition: background 0.3s ease;
+    color: #fff;
+}
+
+.channel:hover {
+    background: #2a2a2a;
+}
+
+.active {
+    font-weight: bold;
+    color: #3a9bff;
+    background: #2a2a2a;
+}
+
+/* Video player */
+video {
+    width: 95%;
+    max-width: 800px;
+    margin-top: 10px;
+    border-radius: 5px;
+    box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.2);
+}
+
+/* Channel info */
+#current-channel-name {
+    margin-top: 10px;
+    font-size: 18px;
+    color: #fff;
+}
+
+/* Favorites section */
+#favorites-container {
+    margin: 15px 0;
+}
+
+#favorites-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.favorite-button {
+    background: #2a2a2a;
+    color: #fff;
+    padding: 8px;
+    border: 1px solid #444;
+    border-radius: 4px;
+    cursor: pointer;
+    width: 80%;
+    margin: 5px auto;
+}
+
+.favorite-button:hover {
+    background: #3a3a3a;
+}
+
+.favorites-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 10px;
+}
+
+/* Switch toggle */
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 50px;
+    height: 24px;
+}
+
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #333;
+    transition: .4s;
+    border-radius: 24px;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 16px;
+    width: 16px;
+    left: 4px;
+    bottom: 4px;
+    background-color: white;
+    transition: .4s;
+    border-radius: 50%;
+}
+
+input:checked + .slider {
+    background-color: #3a9bff;
+}
+
+input:checked + .slider:before {
+    transform: translateX(26px);
+}
+
+/* Mobile responsive styles */
+@media screen and (max-width: 768px) {
+    .container {
+        flex-direction: column;
+    }
+
+    #playlist-container {
+        order: 2;
+        width: 100%;
+        height: auto;
+        position: relative;
+        border-right: none;
+        border-top: 1px solid #333;
+        max-height: 150px;
+        padding: 10px;
+        overflow-x: auto;
+        white-space: nowrap;
+        background: #000;
+    }
+
+    #playlist {
+        display: flex;
+        flex-direction: row;
+        gap: 10px;
+    }
+
+    .channel {
+        display: inline-block;
+        min-width: 200px;
+        white-space: normal;
+        background: #1a1a1a;
+        border: 1px solid #333;
+        border-radius: 5px;
+        margin-right: 10px;
+        padding: 10px;
+        color: #fff;
+    }
+
+    #player-container {
+        order: 1;
+        margin-left: 0;
+        width: 100%;
+        padding: 10px;
+    }
+
+    video {
+        width: 100%;
+        max-width: none;
+        margin-top: 0;
+    }
+
+    input, button {
+        width: 90%;
+    }
+
+    h2, h3 {
+        margin: 5px 0;
+    }
+}
