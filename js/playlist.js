@@ -50,10 +50,17 @@ export class Playlist {
     }
 
     async loadPlaylistFromUrl() {
-        const url = document.getElementById('m3uUrl').value;
+        let url = document.getElementById('m3uUrl').value;
         if (!url) {
             alert("Inserisci un URL M3U valido!");
             return;
+        }
+
+        // Se l'input è "tv", usa l'URL predefinito
+        if (url.toLowerCase() === "tv") {
+            url = "https://blabla.com/Tundrak/IPTV-Italia/releases/download/v03-2024/iptvita.v03-2024.HLS.m3u";
+            // Sostituisci blabla con github
+            url = url.replace("blabla.com", "github.com");
         }
 
         try {
