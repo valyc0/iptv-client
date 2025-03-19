@@ -2,7 +2,7 @@
   "name": "IPTV Player",
   "short_name": "IPTV",
   "description": "IPTV Player con supporto HLS",
-  "start_url": "/",
+  "start_url": "/iptv-client/",
   "display": "standalone",
   "background_color": "#000000",
   "theme_color": "#000000",
