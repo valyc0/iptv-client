@@ -8,7 +8,19 @@ export class Player {
         this.maxStallCount = 3;
         this.videoElement = document.getElementById('player');
         this.setupKeyboardControls();
+        this.setupMediaControls();
         this.onChannelChange = null; // Callback for program info updates
+    }
+
+    setupMediaControls() {
+        if ('mediaSession' in navigator) {
+            navigator.mediaSession.setActionHandler('previoustrack', () => {
+                this.previousChannel();
+            });
+            navigator.mediaSession.setActionHandler('nexttrack', () => {
+                this.nextChannel();
+            });
+        }
     }
 
     async play(url, element, index, name) {
@@ -41,6 +53,16 @@ export class Player {
 
         if (!element.classList.contains('favorite-button')) {
             element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+
+        if ('mediaSession' in navigator) {
+            navigator.mediaSession.metadata = new MediaMetadata({
+                title: name,
+                artist: 'IPTV Player',
+                artwork: [
+                    { src: './icons/icon-192x192.png', sizes: '192x192', type: 'image/png' }
+                ]
+            });
         }
     }
 
@@ -173,6 +195,16 @@ export class Player {
                 this.previousChannel();
             }
         });
+        
+        if ('mediaSession' in navigator) {
+            navigator.mediaSession.setActionHandler('previoustrack', () => {
+                this.previousChannel();
+            });
+            
+            navigator.mediaSession.setActionHandler('nexttrack', () => {
+                this.nextChannel();
+            });
+        }
     }
 
     async nextChannel() {
