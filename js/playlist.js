@@ -63,19 +63,34 @@ export class Playlist {
             url = url.replace("blabla.com", "github.com");
         }
 
-        try {
-            const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-            const response = await fetch(proxyUrl);
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        const proxies = [
+            (u) => u,  // tentativo diretto (funziona con GitHub raw, ecc.)
+            (u) => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
+            (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+            (u) => `https://cors-anywhere.herokuapp.com/${u}`,
+        ];
+
+        let lastError = null;
+        for (const makeUrl of proxies) {
+            try {
+                const fetchUrl = makeUrl(url);
+                const response = await fetch(fetchUrl);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                const m3uContent = await response.text();
+                if (!m3uContent.trim().startsWith('#EXTM3U') && !m3uContent.includes('#EXTINF')) {
+                    throw new Error('Risposta non è una playlist M3U valida');
+                }
+                this.parseM3U(m3uContent);
+                localStorage.setItem('m3uPlaylist', m3uContent);
+                localStorage.setItem('m3uUrl', url);
+                return;
+            } catch (error) {
+                lastError = error;
             }
-            const m3uContent = await response.text();
-            this.parseM3U(m3uContent);
-            localStorage.setItem('m3uPlaylist', m3uContent);
-            localStorage.setItem('m3uUrl', url);
-        } catch (error) {
-            alert("Errore nel caricamento della playlist: " + error.message);
         }
+        alert("Errore nel caricamento della playlist: " + lastError.message);
     }
 
     loadPlaylistFromFile(event) {
