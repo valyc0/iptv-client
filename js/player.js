@@ -2,11 +2,17 @@ export class Player {
     constructor() {
         this.currentHls = null;
         this.currentChannel = null;
-        this.stallInterval = null;
         this.lastClickedFavorite = null;
         this.previousClickedFavorite = null;
         this.maxStallCount = 3;
+        this.maxRetries = 5;
+        this.retries = 0;
+        this.streamToken = 0; // invalida timer e callback di stream precedenti
+        this.retryTimer = null;
         this.videoElement = document.getElementById('player');
+        this.createStatusElement();
+        this.setupVideoEvents();
+        this.startWatchdog();
         this.setupKeyboardControls();
         this.setupMediaControls();
         this.onChannelChange = null; // Callback for program info updates
@@ -26,8 +32,8 @@ export class Player {
     async play(url, element, index, name) {
         this.updateLastClickedChannels(url, element, index, name);
         this.updateActiveChannel(element, name);
-        this.updateStallDetection();
-        await this.initializePlayer(url);
+        this.retries = 0;
+        this.startStream(url);
         
         // Call the program info update callback
         if (this.onChannelChange) {
@@ -66,123 +72,164 @@ export class Player {
         }
     }
 
-    async initializePlayer(url) {
-        if (!Hls.isSupported()) {
+    createStatusElement() {
+        this.statusElement = document.createElement('div');
+        this.statusElement.id = 'player-status';
+        this.statusElement.style.cssText = 'min-height: 1.4em; margin-top: 8px; color: #ffb347; text-align: center;';
+        this.videoElement.insertAdjacentElement('afterend', this.statusElement);
+    }
+
+    setStatus(text) {
+        this.statusElement.textContent = text;
+    }
+
+    // Ferma timer e hls.js dello stream corrente, senza toccare il canale selezionato
+    teardown() {
+        this.streamToken++;
+        clearTimeout(this.retryTimer);
+        if (this.currentHls) {
+            this.currentHls.destroy();
+            this.currentHls = null;
+        }
+    }
+
+    startStream(url) {
+        this.teardown();
+        const token = this.streamToken;
+        this.stallCount = 0;
+        this.lastTime = -1;
+        this.healthyTicks = 0;
+        this.setStatus('Caricamento...');
+
+        if (!window.Hls || !Hls.isSupported()) {
             if (this.videoElement.canPlayType('application/vnd.apple.mpegurl')) {
                 this.videoElement.src = url;
-                await this.playVideo();
+                this.playVideo(token);
             } else {
-                throw new Error('HLS not supported in this browser');
+                this.setStatus('Browser non compatibile con HLS');
             }
             return;
         }
 
-        if (this.currentHls) {
-            this.currentHls.destroy();
-        }
-
         const hls = new Hls(this.getHlsConfig());
         this.currentHls = hls;
-        this.setupHlsErrorHandling(hls);
+        this.setupHlsErrorHandling(hls, token);
 
+        hls.on(Hls.Events.MANIFEST_PARSED, () => this.playVideo(token));
         hls.loadSource(url);
         hls.attachMedia(this.videoElement);
-        hls.on(Hls.Events.MANIFEST_PARSED, () => this.playVideo());
     }
 
     getHlsConfig() {
         return {
-            manifestLoadingTimeOut: 20000,
-            manifestLoadingMaxRetry: 3,
+            lowLatencyMode: false,
+            backBufferLength: 30,
+            maxBufferLength: 30,
+            maxMaxBufferLength: 60,
+            manifestLoadingTimeOut: 15000,
+            manifestLoadingMaxRetry: 2,
             manifestLoadingRetryDelay: 500,
-            levelLoadingTimeOut: 20000,
+            levelLoadingTimeOut: 15000,
             levelLoadingMaxRetry: 3,
-            levelLoadingRetryDelay: 500
+            levelLoadingRetryDelay: 500,
+            fragLoadingTimeOut: 20000,
+            fragLoadingMaxRetry: 4,
+            fragLoadingRetryDelay: 500
         };
     }
 
-    setupHlsErrorHandling(hls) {
+    setupHlsErrorHandling(hls, token) {
+        let networkRecoveries = 0;
+        let mediaRecoveries = 0;
+
         hls.on(Hls.Events.ERROR, (event, data) => {
-            if (data.fatal) {
-                switch (data.type) {
-                    case Hls.ErrorTypes.NETWORK_ERROR:
-                        console.log('Network error, trying to recover...');
-                        hls.startLoad();
-                        break;
-                    case Hls.ErrorTypes.MEDIA_ERROR:
-                        console.log('Media error, trying to recover...');
-                        hls.recoverMediaError();
-                        break;
-                    default:
-                        console.log('Fatal error, restarting stream...');
-                        this.restartStream();
-                        break;
-                }
+            if (!data.fatal || token !== this.streamToken) return;
+            console.log('Fatal HLS error:', data.type, data.details);
+
+            if (data.type === Hls.ErrorTypes.NETWORK_ERROR && networkRecoveries++ < 2) {
+                hls.startLoad();
+            } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR && mediaRecoveries++ < 2) {
+                if (mediaRecoveries === 2) hls.swapAudioCodec();
+                hls.recoverMediaError();
+            } else {
+                this.recover(data.details);
             }
         });
     }
 
-    async playVideo() {
+    async playVideo(token) {
         try {
             await this.videoElement.play();
         } catch (error) {
-            console.log('Play failed:', error);
-            setTimeout(() => this.restartStream(), 2000);
-        }
-    }
-
-    restartStream() {
-        if (this.currentChannel) {
-            const { url, element, index, name } = this.currentChannel;
-            if (this.currentHls) {
-                this.currentHls.destroy();
-                this.currentHls = null;
+            if (token !== this.streamToken) return;
+            if (error.name === 'NotAllowedError') {
+                // Autoplay bloccato: riprova senza audio invece di riavviare lo stream
+                this.videoElement.muted = true;
+                this.videoElement.play().catch(() => this.setStatus('Premi play per avviare'));
+            } else if (error.name !== 'AbortError') {
+                this.recover(error.name);
             }
-            setTimeout(() => this.play(url, element, index, name), 1000);
         }
     }
 
-    updateStallDetection() {
-        let stallCount = 0;
-        let lastTime = 0;
-        let stallTimeout;
+    // Riprova lo stream corrente con backoff; dopo maxRetries tentativi si ferma
+    recover(reason) {
+        if (!this.currentChannel) return;
+        if (this.retries >= this.maxRetries) {
+            this.teardown();
+            this.setStatus('Canale non raggiungibile, prova un altro canale');
+            return;
+        }
+        this.retries++;
+        const delay = Math.min(1000 * 2 ** (this.retries - 1), 10000);
+        console.log(`Recover (${reason}): tentativo ${this.retries}/${this.maxRetries} tra ${delay}ms`);
+        this.setStatus(`Riconnessione... (${this.retries}/${this.maxRetries})`);
 
-        const checkStall = () => {
-            if (this.videoElement.currentTime === lastTime && !this.videoElement.paused) {
-                stallCount++;
-                console.log('Stall detected:', stallCount);
-                if (stallCount >= this.maxStallCount) {
-                    console.log('Multiple stalls detected, restarting stream...');
-                    this.restartStream();
-                    stallCount = 0;
+        const { url } = this.currentChannel;
+        this.teardown();
+        const token = this.streamToken;
+        this.retryTimer = setTimeout(() => {
+            if (token === this.streamToken) this.startStream(url);
+        }, delay);
+    }
+
+    // Listener registrati una sola volta
+    setupVideoEvents() {
+        const video = this.videoElement;
+        video.addEventListener('playing', () => this.setStatus(''));
+        video.addEventListener('waiting', () => {
+            if (this.currentChannel && !video.paused) this.setStatus('Buffering...');
+        });
+        video.addEventListener('error', () => {
+            // hls.js gestisce i propri errori; qui solo il player nativo (Safari)
+            if (!this.currentHls && this.currentChannel && video.getAttribute('src')) {
+                this.recover('video error');
+            }
+        });
+    }
+
+    // Controlla ogni 5s che la riproduzione avanzi; se resta ferma riavvia lo stream
+    startWatchdog() {
+        setInterval(() => {
+            const video = this.videoElement;
+            if (!this.currentChannel || !this.streamToken || video.paused || video.seeking) {
+                return;
+            }
+            if (!this.currentHls && !video.getAttribute('src')) return;
+
+            if (video.currentTime === this.lastTime) {
+                this.healthyTicks = 0;
+                if (++this.stallCount >= this.maxStallCount) {
+                    this.stallCount = 0;
+                    this.recover('stall');
                 }
             } else {
-                stallCount = 0;
+                this.stallCount = 0;
+                // Stream stabile da ~15s: azzera i tentativi di riconnessione
+                if (++this.healthyTicks >= 3) this.retries = 0;
             }
-            lastTime = this.videoElement.currentTime;
-        };
-
-        if (this.stallInterval) {
-            clearInterval(this.stallInterval);
-        }
-
-        this.stallInterval = setInterval(checkStall, 3000);
-
-        this.videoElement.addEventListener('stalled', () => {
-            console.log('Stream stalled');
-            if (stallTimeout) clearTimeout(stallTimeout);
-            stallTimeout = setTimeout(() => this.restartStream(), 10000);
-        });
-
-        this.videoElement.addEventListener('playing', () => {
-            if (stallTimeout) clearTimeout(stallTimeout);
-        });
-
-        this.videoElement.addEventListener('waiting', () => {
-            console.log('Stream buffering');
-            if (stallTimeout) clearTimeout(stallTimeout);
-            stallTimeout = setTimeout(() => this.restartStream(), 10000);
-        });
+            this.lastTime = video.currentTime;
+        }, 5000);
     }
 
     setupKeyboardControls() {
