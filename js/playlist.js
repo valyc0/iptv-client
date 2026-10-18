@@ -25,6 +25,15 @@ export class Playlist {
         const clearButton = document.querySelector('button:nth-of-type(2)');
         clearButton.onclick = () => this.clearPlaylist();
 
+        // Filter: only favorites
+        this.onlyFavorites = false;
+        const favFilter = document.getElementById('fav-filter');
+        favFilter.onclick = () => {
+            this.onlyFavorites = !this.onlyFavorites;
+            favFilter.classList.toggle('on', this.onlyFavorites);
+            this.filterChannels();
+        };
+
         // Reset favorites handler
         document.getElementById('reset-favorites').onclick = () => this.resetFavorites();
 
@@ -198,7 +207,8 @@ export class Playlist {
 
         channels.forEach(channel => {
             const channelName = channel.dataset.channelName.toLowerCase();
-            if (channelName.includes(searchTerm)) {
+            const favOk = !this.onlyFavorites || this.isFavorite(channel.dataset.favoriteId);
+            if (favOk && channelName.includes(searchTerm)) {
                 channel.style.display = '';
                 channel.dataset.visibleIndex = visibleIndex;
                 visibleIndex++;
@@ -236,6 +246,7 @@ export class Playlist {
         this.saveFavorites();
         this.refreshStars();
         this.updateFavoritesButtons();
+        this.filterChannels();
     }
 
     refreshStar(channelEl) {
@@ -336,6 +347,9 @@ export class Playlist {
             videoBtn.style.padding = '10px 20px';
             videoBtn.textContent = fav.name;
             videoBtn.dataset.channelName = fav.name;
+            if (this.player.currentChannel && this.player.currentChannel.name === fav.name) {
+                videoBtn.classList.add('active');
+            }
             videoBtn.onclick = () => this.player.play(this.resolveFavorite(fav), videoBtn, 0, fav.name);
             container.appendChild(videoBtn);
         });

@@ -50,6 +50,9 @@ export class Player {
     updateActiveChannel(element, name) {
         document.querySelectorAll('.channel').forEach(el => el.classList.remove('active'));
         element.classList.add('active');
+        document.querySelectorAll('.favorite-button').forEach(el => {
+            el.classList.toggle('active', el.dataset.channelName === name);
+        });
         
         const channelName = document.getElementById('current-channel-name');
         channelName.textContent = name;
@@ -193,10 +196,34 @@ export class Player {
         }, delay);
     }
 
+    // Tiene lo schermo acceso durante la riproduzione (utile in auto)
+    async requestWakeLock() {
+        try {
+            if (!('wakeLock' in navigator) || (this.wakeLock && !this.wakeLock.released)) return;
+            this.wakeLock = await navigator.wakeLock.request('screen');
+        } catch (e) {
+            // non concesso (batteria scarica, tab in background): si ignora
+        }
+    }
+
+    releaseWakeLock() {
+        if (this.wakeLock) {
+            this.wakeLock.release().catch(() => {});
+            this.wakeLock = null;
+        }
+    }
+
     // Listener registrati una sola volta
     setupVideoEvents() {
         const video = this.videoElement;
-        video.addEventListener('playing', () => this.setStatus(''));
+        video.addEventListener('playing', () => {
+            this.setStatus('');
+            this.requestWakeLock();
+        });
+        video.addEventListener('pause', () => this.releaseWakeLock());
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible' && !video.paused) this.requestWakeLock();
+        });
         video.addEventListener('waiting', () => {
             if (this.currentChannel && !video.paused) this.setStatus('Buffering...');
         });
