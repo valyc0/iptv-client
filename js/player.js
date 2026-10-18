@@ -126,11 +126,17 @@ export class Player {
     getHlsConfig() {
         return {
             lowLatencyMode: false,
+            // Avvio rapido: parte dalla qualità più bassa e sale con l'ABR, scarica subito
+            // il primo frammento e si posiziona più vicino al live
+            startLevel: 0,
+            startFragPrefetch: true,
+            liveSyncDurationCount: 2,
+            capLevelToPlayerSize: true,
             backBufferLength: 30,
             maxBufferLength: 30,
             maxMaxBufferLength: 60,
-            manifestLoadingTimeOut: 15000,
-            manifestLoadingMaxRetry: 2,
+            manifestLoadingTimeOut: 10000,
+            manifestLoadingMaxRetry: 1,
             manifestLoadingRetryDelay: 500,
             levelLoadingTimeOut: 15000,
             levelLoadingMaxRetry: 3,
