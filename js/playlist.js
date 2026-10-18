@@ -135,18 +135,21 @@ export class Playlist {
 
         let name = "";
         let id = "";
+        let logo = "";
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i].trim();
             if (line.startsWith("#EXTINF")) {
                 // Il nome segue l'ultima virgola fuori dagli attributi tra virgolette
                 id = (line.match(/tvg-id="([^"]*)"/) || [])[1] || "";
+                logo = (line.match(/tvg-logo="([^"]*)"/) || [])[1] || "";
                 name = line.replace(/"[^"]*"/g, '""').split(",").slice(1).join(",").trim() || "Canale Sconosciuto";
             } else if (/^https?:\/\//i.test(line)) {
                 // Su pagina HTTPS gli stream http sono bloccati (mixed content): prova https
                 const streamUrl = location.protocol === 'https:' ? line.replace(/^http:/i, 'https:') : line;
-                this.createChannelElement(name, streamUrl, i, id);
+                this.createChannelElement(name, streamUrl, i, id, logo);
                 name = "";
                 id = "";
+                logo = "";
             }
         }
 
@@ -164,13 +167,13 @@ export class Playlist {
         return tvgId || name.replace(/\([^)]*\)|\[[^\]]*\]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
     }
 
-    createChannelElement(name, url, index, tvgId) {
+    createChannelElement(name, url, index, tvgId, logo = "") {
         let id = this.favoriteId(name, tvgId);
         // Stesso tvg-id su più stream (es. varianti dello stesso canale): suffisso progressivo
         for (let n = 2; this.channels.has(id); n++) {
             id = `${this.favoriteId(name, tvgId)}#${n}`;
         }
-        this.channels.set(id, { name, url });
+        this.channels.set(id, { name, url, logo });
 
         const channelContainer = document.createElement("div");
         channelContainer.className = "channel";
@@ -182,7 +185,7 @@ export class Playlist {
         star.title = "Aggiungi/rimuovi dai preferiti";
         star.onclick = (e) => {
             e.stopPropagation();
-            this.toggleFavorite(id, name, url);
+            this.toggleFavorite(id, name, url, logo);
         };
         const label = document.createElement("span");
         label.className = "channel-name";
@@ -249,11 +252,11 @@ export class Playlist {
         return this.favorites.some(f => f.id === id);
     }
 
-    toggleFavorite(id, name, url) {
+    toggleFavorite(id, name, url, logo = "") {
         if (this.isFavorite(id)) {
             this.favorites = this.favorites.filter(f => f.id !== id);
         } else {
-            this.favorites.push({ id, name, url });
+            this.favorites.push({ id, name, url, logo });
         }
         this.saveFavorites();
         this.refreshStars();
@@ -284,7 +287,7 @@ export class Playlist {
         const data = {
             version: 1,
             m3uUrl: localStorage.getItem('m3uUrl') || '',
-            channels: [...(this.channels || [])].map(([id, ch]) => ({ id, name: ch.name, url: ch.url })),
+            channels: [...(this.channels || [])].map(([id, ch]) => ({ id, name: ch.name, url: ch.url, logo: ch.logo })),
             favorites: this.favorites
         };
         const a = document.createElement('a');
@@ -308,7 +311,7 @@ export class Playlist {
             if (channels.length) {
                 // Ricostruisce una M3U con gli stessi id, così preferiti e canali restano collegati
                 const m3u = '#EXTM3U\n' + channels.map(c =>
-                    `#EXTINF:-1 tvg-id="${(c.id || '').replace(/"/g, '')}",${c.name.replace(/[\r\n]/g, ' ')}\n${c.url}`
+                    `#EXTINF:-1 tvg-id="${(c.id || '').replace(/"/g, '')}" tvg-logo="${(c.logo || '').replace(/"/g, '')}",${c.name.replace(/[\r\n]/g, ' ')}\n${c.url}`
                 ).join('\n');
                 this.parseM3U(m3u);
                 try {
@@ -330,7 +333,14 @@ export class Playlist {
     relinkFavorites() {
         let changed = false;
         this.favorites.forEach(fav => {
-            if (this.channels.has(fav.id)) return;
+            const cur = this.channels.get(fav.id);
+            if (cur) {
+                if (cur.logo && fav.logo !== cur.logo) {
+                    fav.logo = cur.logo;
+                    changed = true;
+                }
+                return;
+            }
             for (const [id, ch] of this.channels) {
                 if (this.favoriteId(ch.name, '') === fav.id) {
                     fav.id = id;
@@ -346,8 +356,9 @@ export class Playlist {
     resolveFavorite(fav) {
         const current = this.channels && this.channels.get(fav.id);
         if (current) {
-            if (fav.url !== current.url) {
+            if (fav.url !== current.url || (current.logo && fav.logo !== current.logo)) {
                 fav.url = current.url;
+                if (current.logo) fav.logo = current.logo;
                 this.saveFavorites();
             }
             return current.url;
@@ -403,7 +414,15 @@ export class Playlist {
             videoBtn.style.width = 'auto';
             videoBtn.style.margin = '0';
             videoBtn.style.padding = '10px 20px';
-            videoBtn.textContent = fav.name;
+            if (fav.logo) {
+                const img = document.createElement('img');
+                img.src = fav.logo;
+                img.alt = '';
+                img.loading = 'lazy';
+                img.onerror = () => img.remove();
+                videoBtn.appendChild(img);
+            }
+            videoBtn.appendChild(Object.assign(document.createElement('span'), { textContent: fav.name }));
             videoBtn.dataset.channelName = fav.name;
             if (this.player.currentChannel && this.player.currentChannel.name === fav.name) {
                 videoBtn.classList.add('active');

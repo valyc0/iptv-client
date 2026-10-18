@@ -389,3 +389,17 @@ button, .channel, .star {
     padding: 6px 10px;
     font-size: 14px;
 }
+
+.favorite-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.favorite-button img {
+    height: 28px;
+    max-width: 56px;
+    object-fit: contain;
+    flex-shrink: 0;
+}
