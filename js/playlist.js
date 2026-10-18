@@ -56,11 +56,9 @@ export class Playlist {
             return;
         }
 
-        // Se l'input è "tv", usa l'URL predefinito
+        // Scorciatoia: "tv" carica la playlist italiana di iptv-org
         if (url.toLowerCase() === "tv") {
-            url = "https://blabla.com/Tundrak/IPTV-Italia/releases/download/v03-2024/iptvita.v03-2024.HLS.m3u";
-            // Sostituisci blabla con github
-            url = url.replace("blabla.com", "github.com");
+            url = "https://iptv-org.github.io/iptv/countries/it.m3u";
         }
 
         const proxies = [
@@ -83,8 +81,12 @@ export class Playlist {
                     throw new Error('Risposta non è una playlist M3U valida');
                 }
                 this.parseM3U(m3uContent);
-                localStorage.setItem('m3uPlaylist', m3uContent);
-                localStorage.setItem('m3uUrl', url);
+                try {
+                    localStorage.setItem('m3uPlaylist', m3uContent);
+                    localStorage.setItem('m3uUrl', url);
+                } catch (e) {
+                    console.warn('Playlist troppo grande per localStorage, non salvata');
+                }
                 return;
             } catch (error) {
                 lastError = error;
@@ -101,13 +103,17 @@ export class Playlist {
         reader.onload = (e) => {
             const content = e.target.result;
             this.parseM3U(content);
-            localStorage.setItem('m3uPlaylist', content);
+            try {
+                localStorage.setItem('m3uPlaylist', content);
+            } catch (e) {
+                console.warn('Playlist troppo grande per localStorage, non salvata');
+            }
         };
         reader.readAsText(file);
     }
 
     parseM3U(m3u) {
-        const lines = m3u.split("\n");
+        const lines = m3u.split(/\r?\n/);
         const playlistDiv = document.getElementById("playlist");
         playlistDiv.innerHTML = "";
         
@@ -117,9 +123,13 @@ export class Playlist {
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i].trim();
             if (line.startsWith("#EXTINF")) {
-                name = line.split(",")[1] || "Canale Sconosciuto";
-            } else if (line.startsWith("http")) {
-                this.createChannelElement(name, line, i);
+                // Il nome segue l'ultima virgola fuori dagli attributi tra virgolette
+                name = line.replace(/"[^"]*"/g, '""').split(",").slice(1).join(",").trim() || "Canale Sconosciuto";
+            } else if (/^https?:\/\//i.test(line)) {
+                // Su pagina HTTPS gli stream http sono bloccati (mixed content): prova https
+                const streamUrl = location.protocol === 'https:' ? line.replace(/^http:/i, 'https:') : line;
+                this.createChannelElement(name, streamUrl, i);
+                name = "";
             }
         }
 
