@@ -60,9 +60,9 @@ export class Playlist {
             return;
         }
 
-        // Scorciatoia: "tv" carica la playlist italiana di iptv-org
+        // Scorciatoia: "tv" carica la playlist italiana di Free-TV
         if (url.toLowerCase() === "tv") {
-            url = "https://iptv-org.github.io/iptv/countries/it.m3u";
+            url = "https://raw.githubusercontent.com/Free-TV/IPTV/master/playlists/playlist_italy.m3u8";
         }
 
         const proxies = [
@@ -156,9 +156,12 @@ export class Playlist {
     }
 
     createChannelElement(name, url, index, tvgId) {
-        const id = this.favoriteId(name, tvgId);
-        // In caso di duplicati tiene il primo
-        if (!this.channels.has(id)) this.channels.set(id, { name, url });
+        let id = this.favoriteId(name, tvgId);
+        // Stesso tvg-id su più stream (es. varianti dello stesso canale): suffisso progressivo
+        for (let n = 2; this.channels.has(id); n++) {
+            id = `${this.favoriteId(name, tvgId)}#${n}`;
+        }
+        this.channels.set(id, { name, url });
 
         const channelContainer = document.createElement("div");
         channelContainer.className = "channel";
