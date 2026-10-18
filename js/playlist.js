@@ -37,6 +37,15 @@ export class Playlist {
         // Reset favorites handler
         document.getElementById('reset-favorites').onclick = () => this.resetFavorites();
 
+        // Export / import JSON (canali + preferiti)
+        document.getElementById('export-json').onclick = () => this.exportJson();
+        const importFile = document.getElementById('importFile');
+        document.getElementById('import-json').onclick = () => importFile.click();
+        importFile.onchange = (e) => {
+            this.importJson(e.target.files[0]);
+            e.target.value = '';
+        };
+
         // Search input handler
         const searchInput = document.getElementById('channelSearch');
         searchInput.addEventListener('input', () => this.filterChannels());
@@ -269,6 +278,52 @@ export class Playlist {
         this.saveFavorites();
         this.refreshStars();
         this.updateFavoritesButtons();
+    }
+
+    exportJson() {
+        const data = {
+            version: 1,
+            m3uUrl: localStorage.getItem('m3uUrl') || '',
+            channels: [...(this.channels || [])].map(([id, ch]) => ({ id, name: ch.name, url: ch.url })),
+            favorites: this.favorites
+        };
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+        a.download = 'iptv-backup.json';
+        a.click();
+        URL.revokeObjectURL(a.href);
+    }
+
+    async importJson(file) {
+        if (!file) return;
+        try {
+            const data = JSON.parse(await file.text());
+            const channels = Array.isArray(data.channels) ? data.channels.filter(c => c && c.name && c.url) : [];
+            const favorites = Array.isArray(data.favorites) ? data.favorites.filter(f => f && f.name && f.url) : [];
+            if (!channels.length && !favorites.length) throw new Error('nessun canale o preferito nel file');
+
+            this.favorites = favorites.map(f => ({ ...f, id: f.id || this.favoriteId(f.name, '') }));
+            this.saveFavorites();
+
+            if (channels.length) {
+                // Ricostruisce una M3U con gli stessi id, così preferiti e canali restano collegati
+                const m3u = '#EXTM3U\n' + channels.map(c =>
+                    `#EXTINF:-1 tvg-id="${(c.id || '').replace(/"/g, '')}",${c.name.replace(/[\r\n]/g, ' ')}\n${c.url}`
+                ).join('\n');
+                this.parseM3U(m3u);
+                try {
+                    localStorage.setItem('m3uPlaylist', m3u);
+                    if (data.m3uUrl) localStorage.setItem('m3uUrl', data.m3uUrl);
+                } catch (e) {
+                    console.warn('Playlist troppo grande per localStorage, non salvata');
+                }
+            } else {
+                this.refreshStars();
+                this.updateFavoritesButtons();
+            }
+        } catch (e) {
+            alert('File JSON non valido: ' + e.message);
+        }
     }
 
     // Favoriti salvati con id da nome (vecchio formato): li collega al tvg-id del canale

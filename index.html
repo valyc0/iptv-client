@@ -22,7 +22,10 @@
             <button>Cancella Playlist</button>
             <br>
             <input type="file" id="fileInput" accept=".m3u">
-            <button id="reset-favorites">Reset preferiti</button>
+            <button id="reset-favorites" class="small-btn">Reset preferiti</button>
+            <button id="export-json" class="small-btn" type="button" title="Esporta canali e preferiti in JSON">⬇ JSON</button>
+            <button id="import-json" class="small-btn" type="button" title="Importa canali e preferiti da JSON">⬆ JSON</button>
+            <input type="file" id="importFile" accept=".json,application/json" style="display:none">
             <input type="text" id="channelSearch" placeholder="Cerca canale">
             <button id="fav-filter" type="button">★ Solo preferiti</button>
         

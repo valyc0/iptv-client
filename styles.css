@@ -382,3 +382,10 @@ button, .channel, .star {
     background: #ffc107;
     color: #000;
 }
+
+#playlist-container .small-btn {
+    width: auto;
+    margin: 4px;
+    padding: 6px 10px;
+    font-size: 14px;
+}
