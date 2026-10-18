@@ -25,9 +25,8 @@ export class Playlist {
         const clearButton = document.querySelector('button:nth-of-type(2)');
         clearButton.onclick = () => this.clearPlaylist();
 
-        // Favorites switch handler
-        const favoritesSwitch = document.getElementById('favorites-switch');
-        favoritesSwitch.addEventListener('change', () => this.updateFavoritesButtons());
+        // Reset favorites handler
+        document.getElementById('reset-favorites').onclick = () => this.resetFavorites();
 
         // Search input handler
         const searchInput = document.getElementById('channelSearch');
@@ -42,11 +41,7 @@ export class Playlist {
         this.createToggleButton(videoContainer);
 
         // Load stored favorites
-        const storedFavorites = localStorage.getItem('favorites');
-        if (storedFavorites) {
-            this.favorites = JSON.parse(storedFavorites);
-            this.updateFavoritesButtons();
-        }
+        this.loadFavorites();
     }
 
     async loadPlaylistFromUrl() {
@@ -114,50 +109,76 @@ export class Playlist {
 
     parseM3U(m3u) {
         const lines = m3u.split(/\r?\n/);
+        this.channels = new Map(); // id preferito -> { name, url }
         const playlistDiv = document.getElementById("playlist");
         playlistDiv.innerHTML = "";
         
         this.hideInputElements();
 
         let name = "";
+        let id = "";
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i].trim();
             if (line.startsWith("#EXTINF")) {
                 // Il nome segue l'ultima virgola fuori dagli attributi tra virgolette
+                id = (line.match(/tvg-id="([^"]*)"/) || [])[1] || "";
                 name = line.replace(/"[^"]*"/g, '""').split(",").slice(1).join(",").trim() || "Canale Sconosciuto";
             } else if (/^https?:\/\//i.test(line)) {
                 // Su pagina HTTPS gli stream http sono bloccati (mixed content): prova https
                 const streamUrl = location.protocol === 'https:' ? line.replace(/^http:/i, 'https:') : line;
-                this.createChannelElement(name, streamUrl, i);
+                this.createChannelElement(name, streamUrl, i, id);
                 name = "";
+                id = "";
             }
         }
+
+        this.relinkFavorites();
+        this.refreshStars();
+        this.updateFavoritesButtons();
 
         if (playlistDiv.innerHTML === "") {
             playlistDiv.innerHTML = "<p style='color: red;'>Nessun canale trovato!</p>";
         }
     }
 
-    createChannelElement(name, url, index) {
+    // Identificatore stabile: tvg-id se presente, altrimenti nome senza qualità/tag
+    favoriteId(name, tvgId) {
+        return tvgId || name.replace(/\([^)]*\)|\[[^\]]*\]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    }
+
+    createChannelElement(name, url, index, tvgId) {
+        const id = this.favoriteId(name, tvgId);
+        // In caso di duplicati tiene il primo
+        if (!this.channels.has(id)) this.channels.set(id, { name, url });
+
         const channelContainer = document.createElement("div");
         channelContainer.className = "channel";
-        channelContainer.textContent = name;
         channelContainer.dataset.channelName = name;
+        channelContainer.dataset.favoriteId = id;
+
+        const star = document.createElement("span");
+        star.className = "star";
+        star.title = "Aggiungi/rimuovi dai preferiti";
+        star.onclick = (e) => {
+            e.stopPropagation();
+            this.toggleFavorite(id, name, url);
+        };
+        const label = document.createElement("span");
+        label.className = "channel-name";
+        label.textContent = name;
+        channelContainer.append(star, label);
+
         channelContainer.onclick = () => {
             this.player.play(url, channelContainer, index, name);
-            
+
             // Update toggle button state whenever a channel is played
             if (this.toggleButton) {
                 this.toggleButton.disabled = !this.player.previousClickedFavorite;
                 this.toggleButton.style.opacity = this.player.previousClickedFavorite ? '1' : '0.5';
             }
-            
-            const favoritesSwitch = document.getElementById('favorites-switch');
-            if (favoritesSwitch.checked) {
-                this.addToFavorites(name, url, index);
-            }
         };
         document.getElementById("playlist").appendChild(channelContainer);
+        this.refreshStar(channelContainer);
     }
 
     hideInputElements() {
@@ -176,7 +197,7 @@ export class Playlist {
         let visibleIndex = 0;
 
         channels.forEach(channel => {
-            const channelName = channel.textContent.toLowerCase();
+            const channelName = channel.dataset.channelName.toLowerCase();
             if (channelName.includes(searchTerm)) {
                 channel.style.display = '';
                 channel.dataset.visibleIndex = visibleIndex;
@@ -187,24 +208,82 @@ export class Playlist {
         });
     }
 
-    addToFavorites(name, url, index) {
-        if (this.favorites.some(f => f.url === url)) {
-            return;
+    loadFavorites() {
+        try {
+            const stored = JSON.parse(localStorage.getItem('favorites')) || [];
+            // Migra il vecchio formato { name, url, index } aggiungendo l'id
+            this.favorites = stored.map(f => ({ ...f, id: f.id || this.favoriteId(f.name, '') }));
+        } catch (e) {
+            this.favorites = [];
         }
-        
-        if (this.favorites.length >= 3) {
-            this.favorites.shift();
-        }
-        
-        this.favorites.push({ name, url, index });
-        localStorage.setItem('favorites', JSON.stringify(this.favorites));
         this.updateFavoritesButtons();
     }
 
-    removeFavorite(url) {
-        this.favorites = this.favorites.filter(f => f.url !== url);
+    saveFavorites() {
         localStorage.setItem('favorites', JSON.stringify(this.favorites));
+    }
+
+    isFavorite(id) {
+        return this.favorites.some(f => f.id === id);
+    }
+
+    toggleFavorite(id, name, url) {
+        if (this.isFavorite(id)) {
+            this.favorites = this.favorites.filter(f => f.id !== id);
+        } else {
+            this.favorites.push({ id, name, url });
+        }
+        this.saveFavorites();
+        this.refreshStars();
         this.updateFavoritesButtons();
+    }
+
+    refreshStar(channelEl) {
+        const on = this.isFavorite(channelEl.dataset.favoriteId);
+        const star = channelEl.querySelector('.star');
+        star.classList.toggle('on', on);
+        star.textContent = on ? '★' : '☆';
+    }
+
+    refreshStars() {
+        document.querySelectorAll('.channel').forEach(el => this.refreshStar(el));
+    }
+
+    resetFavorites() {
+        if (!this.favorites.length || !confirm('Rimuovere tutti i preferiti?')) return;
+        this.favorites = [];
+        this.saveFavorites();
+        this.refreshStars();
+        this.updateFavoritesButtons();
+    }
+
+    // Favoriti salvati con id da nome (vecchio formato): li collega al tvg-id del canale
+    relinkFavorites() {
+        let changed = false;
+        this.favorites.forEach(fav => {
+            if (this.channels.has(fav.id)) return;
+            for (const [id, ch] of this.channels) {
+                if (this.favoriteId(ch.name, '') === fav.id) {
+                    fav.id = id;
+                    changed = true;
+                    break;
+                }
+            }
+        });
+        if (changed) this.saveFavorites();
+    }
+
+    // URL aggiornato dalla playlist corrente, con fallback su quello salvato
+    resolveFavorite(fav) {
+        const current = this.channels && this.channels.get(fav.id);
+        if (current) {
+            if (fav.url !== current.url) {
+                fav.url = current.url;
+                this.saveFavorites();
+            }
+            return current.url;
+        }
+        return fav.url;
     }
 
     updateFavoritesButtons() {
@@ -249,16 +328,7 @@ export class Playlist {
     }
 
     createFavoriteButtons(container) {
-        const favoritesSwitch = document.getElementById('favorites-switch');
-        const showDeleteButtons = favoritesSwitch.checked;
-        
         this.favorites.forEach(fav => {
-            const videoWrapper = document.createElement('div');
-            videoWrapper.style.display = 'flex';
-            videoWrapper.style.flexDirection = 'column';
-            videoWrapper.style.alignItems = 'center';
-            videoWrapper.style.gap = '5px';
-
             const videoBtn = document.createElement('button');
             videoBtn.className = 'favorite-button';
             videoBtn.style.width = 'auto';
@@ -266,25 +336,16 @@ export class Playlist {
             videoBtn.style.padding = '10px 20px';
             videoBtn.textContent = fav.name;
             videoBtn.dataset.channelName = fav.name;
-            videoBtn.onclick = () => this.player.play(fav.url, videoBtn, fav.index, fav.name);
-
-            videoWrapper.appendChild(videoBtn);
-
-            if (showDeleteButtons) {
-                const deleteBtn = document.createElement('button');
-                deleteBtn.style.padding = '5px 10px';
-                deleteBtn.style.marginTop = '-3px';
-                deleteBtn.innerHTML = '🗑️';
-                deleteBtn.onclick = () => this.removeFavorite(fav.url);
-                videoWrapper.appendChild(deleteBtn);
-            }
-
-            container.appendChild(videoWrapper);
+            videoBtn.onclick = () => this.player.play(this.resolveFavorite(fav), videoBtn, 0, fav.name);
+            container.appendChild(videoBtn);
         });
     }
 
     clearPlaylist() {
-        localStorage.clear();
+        // I preferiti restano: si cancellano solo con "Reset preferiti"
+        localStorage.removeItem('m3uPlaylist');
+        localStorage.removeItem('m3uUrl');
+        this.channels = new Map();
         document.getElementById('playlist').innerHTML = "Nessuna playlist caricata";
         
         const m3uUrl = document.getElementById('m3uUrl');
@@ -299,21 +360,12 @@ export class Playlist {
         
         document.getElementById('current-channel-name').textContent = '';
         
-        document.getElementById('favorites-buttons').innerHTML = '';
-        document.getElementById('video-favorites-buttons').innerHTML = '';
-
         // Update toggle button state
         if (this.toggleButton) {
             this.toggleButton.disabled = true;
             this.toggleButton.style.opacity = '0.5';
         }
-        
-        this.favorites = [];
-        localStorage.removeItem('favorites');
-        this.createFavoriteButtons(document.getElementById('video-favorites-buttons'));
-        
-        document.getElementById('favorites-switch').checked = false;
-        
+
         const video = document.getElementById('player');
         video.pause();
         video.src = '';

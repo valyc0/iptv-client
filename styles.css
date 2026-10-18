@@ -70,6 +70,31 @@ button:hover {
     color: #fff;
 }
 
+.channel {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.channel .channel-name {
+    flex: 1;
+}
+
+.star {
+    cursor: pointer;
+    font-size: 20px;
+    color: #666;
+    user-select: none;
+}
+
+.star.on {
+    color: #ffc107;
+}
+
+#video-favorites-buttons {
+    flex-wrap: wrap;
+}
+
 .channel:hover {
     background: #2a2a2a;
 }
