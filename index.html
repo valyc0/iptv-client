@@ -60,7 +60,9 @@
         window.tvGuide = new TvGuide();
 
         // Add program info handler to player
+        let guideRequestId = 0;
         window.player.onChannelChange = async (name) => {
+            const requestId = ++guideRequestId;
             const currentProgramDiv = document.getElementById('current-program');
             const nextProgramDiv = document.getElementById('next-program');
             
@@ -69,15 +71,18 @@
             
             try {
                 const programInfo = await window.tvGuide.getCurrentProgram(name);
+                if (requestId !== guideRequestId) return; // cambiato canale nel frattempo
                 
                 if (programInfo.current) {
-                    currentProgramDiv.innerHTML = `<strong>In onda ora (${programInfo.current.time}):</strong> ${programInfo.current.title}`;
+                    currentProgramDiv.innerHTML = '';
+                    currentProgramDiv.append(Object.assign(document.createElement('strong'), { textContent: `In onda ora (${programInfo.current.time}): ` }), programInfo.current.title);
                     
                     if (programInfo.next) {
-                        nextProgramDiv.innerHTML = `<strong>A seguire (${programInfo.next.time}):</strong> ${programInfo.next.title}`;
+                        nextProgramDiv.append(Object.assign(document.createElement('strong'), { textContent: `A seguire (${programInfo.next.time}): ` }), programInfo.next.title);
                     }
                 }
             } catch (error) {
+                if (requestId !== guideRequestId) return;
                 console.error('Errore nel recupero informazioni programma:', error);
                 if (error.message.includes('Canale non supportato')) {
                     currentProgramDiv.innerHTML = 'Guida TV non disponibile per questo canale';

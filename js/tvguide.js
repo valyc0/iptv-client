@@ -1,12 +1,37 @@
-class TvGuide {
-    static async fetchM3uPlaylist(url) {
+const PROXIES = [
+    (u) => `https://r.jina.ai/${u}`, // restituisce il testo della pagina, con CORS
+    (u) => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
+    (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+    (u) => u,
+];
+const FETCH_TIMEOUT_MS = 8000;
+const CACHE_TTL_MS = 30 * 60 * 1000;
+
+// Prova ogni proxy in ordine, con timeout, finché uno risponde
+async function fetchTextWithFallback(url) {
+    let lastError = null;
+    for (const makeUrl of PROXIES) {
         try {
-            const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-            const response = await fetch(proxyUrl);
+            const response = await fetch(makeUrl(url), { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
-            return await response.text();
+            const text = await response.text();
+            if (!text.trim()) {
+                throw new Error('Risposta vuota');
+            }
+            return text;
+        } catch (error) {
+            lastError = error;
+        }
+    }
+    throw lastError;
+}
+
+class TvGuide {
+    static async fetchM3uPlaylist(url) {
+        try {
+            return await fetchTextWithFallback(url);
         } catch (error) {
             throw new Error('Errore nel caricamento della playlist: ' + error.message);
         }
@@ -71,16 +96,60 @@ class TvGuide {
             'ALMATV': { number: 72, url: 'programmi_stasera_almatv.html' }
         };
         this.baseUrl = 'https://www.staseraintv.com/';
+        this.cache = new Map(); // url -> { time, programs }
+        this.pending = new Map(); // url -> Promise (richieste in corso)
+    }
+
+    // "Rai 1 HD (1080p) [Geo-blocked]" -> "rai1"
+    normalizeName(name) {
+        return name
+            .replace(/\[\d+\]|\([^)]*\)|\[[^\]]*\]/g, '')
+            .replace(/\b(hd|fhd|uhd|sd)\b/gi, '')
+            .toLowerCase()
+            .replace(/[^a-z0-9]/g, '');
+    }
+
+    findChannelKey(channel) {
+        const numberMatch = channel.match(/^\s*\[(\d+)\]/);
+        const keys = Object.keys(this.channelUrls);
+        if (numberMatch) {
+            const byNumber = keys.find(k => this.channelUrls[k].number === parseInt(numberMatch[1]));
+            if (byNumber) return byNumber;
+        }
+
+        const clean = this.normalizeName(channel);
+        if (!clean) return null;
+        const exact = keys.find(k => this.normalizeName(k) === clean);
+        if (exact) return exact;
+
+        // Fallback: la chiave più lunga contenuta nel nome (evita La7 al posto di La7d)
+        return keys
+            .filter(k => clean.includes(this.normalizeName(k)))
+            .sort((a, b) => b.length - a.length)[0] || null;
+    }
+
+    async getSchedule(url) {
+        const cached = this.cache.get(url);
+        if (cached && Date.now() - cached.time < CACHE_TTL_MS) {
+            return cached.programs;
+        }
+        if (this.pending.has(url)) {
+            return this.pending.get(url);
+        }
+        const request = this.fetchHtml(url)
+            .then(html => {
+                const programs = this.parseSchedule(html);
+                this.cache.set(url, { time: Date.now(), programs });
+                return programs;
+            })
+            .finally(() => this.pending.delete(url));
+        this.pending.set(url, request);
+        return request;
     }
 
     async fetchHtml(url) {
         try {
-            const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-            const response = await fetch(proxyUrl);
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-            return await response.text();
+            return await fetchTextWithFallback(url);
         } catch (error) {
             throw new Error('Errore di rete: ' + error.message);
         }
@@ -91,22 +160,23 @@ class TvGuide {
         const parser = new DOMParser();
         const doc = parser.parseFromString(html, 'text/html');
 
-        // Look for all text that contains time patterns
         const content = doc.body.textContent;
-        const timeRegex = /(\d{2}[:\.]\d{2})\s*[-–]\s*([^(]+?)(?=\d{2}[:\.]\d{2}|\n|$)/g;
-        let match;
+        // Una riga per programma ("21:30 - Titolo"); se la pagina non ha righe, cerca gli orari nel testo
+        const patterns = [
+            /^[\s#]*(\d{2}[:\.]\d{2})\s*[-–]\s*(.+?)\s*$/gm,
+            /(\d{2}[:\.]\d{2})\s*[-–]\s*([^(]+?)(?=\d{2}[:\.]\d{2}|\n|$)/g,
+        ];
 
-        while ((match = timeRegex.exec(content)) !== null) {
-            const time = match[1].replace('.', ':');
-            const title = match[2].trim();
-            
-            // Skip entries that are just times or empty titles
-            if (title && !title.match(/^\d{2}[:\.]\d{2}$/)) {
-                programs.push({
-                    time: time,
-                    title: title
-                });
+        for (const timeRegex of patterns) {
+            let match;
+            while ((match = timeRegex.exec(content)) !== null) {
+                const time = match[1].replace('.', ':');
+                const title = match[2].trim();
+                if (title && !title.match(/^\d{2}[:\.]\d{2}$/) && !programs.some(p => p.time === time && p.title === title)) {
+                    programs.push({ time, title });
+                }
             }
+            if (programs.length > 0) break;
         }
 
         if (programs.length === 0) {
@@ -133,7 +203,6 @@ class TvGuide {
         const currentMinute = now.getMinutes();
         const currentTimeInMinutes = currentHour * 60 + currentMinute;
 
-        console.log(`Current time: ${currentHour}:${currentMinute} (${currentTimeInMinutes} minutes)`);
         
         // Find the first program that starts after current time
         for (let i = 0; i < programs.length; i++) {
@@ -141,12 +210,10 @@ class TvGuide {
             const [hours, minutes] = program.time.split(':').map(Number);
             const programTimeInMinutes = hours * 60 + minutes;
 
-            console.log(`Checking program: ${program.time} (${programTimeInMinutes} minutes) - ${program.title}`);
 
             if (programTimeInMinutes > currentTimeInMinutes) {
                 // Found a program that starts after current time
                 const currentProg = i > 0 ? programs[i - 1] : programs[programs.length - 1];
-                console.log(`Found next program at ${program.time}, current program is ${currentProg.time}`);
                 return {
                     currentProgram: currentProg,
                     nextProgram: program
@@ -157,7 +224,6 @@ class TvGuide {
         // If we get here, we're after the last program of the day
         const lastProgram = programs[programs.length - 1];
         const firstProgram = programs[0];
-        console.log(`After last program ${lastProgram.time}, next is first program ${firstProgram.time}`);
         return {
             currentProgram: lastProgram,
             nextProgram: firstProgram
@@ -166,23 +232,8 @@ class TvGuide {
 
     async getCurrentProgram(channel) {
         try {
-            // Extract channel number if present (e.g., "[41] K2" -> "41")
-            const numberMatch = channel.match(/\[(\d+)\]/);
-            const channelNumber = numberMatch ? parseInt(numberMatch[1]) : null;
+            const channelKey = this.findChannelKey(channel);
             
-            // Clean channel name by removing number and brackets
-            const cleanChannelName = channel.replace(/\[\d+\]/g, '').trim();
-            
-            let channelKey = null;
-            
-            // First try to find by channel number
-            if (channelNumber) {
-                channelKey = Object.keys(this.channelUrls).find(key =>
-                    this.channelUrls[key].number === channelNumber
-                );
-            }
-            
-            // If not found by number, try by name
             if (!channelKey) {
                 channelKey = Object.keys(this.channelUrls).find(key =>
                     cleanChannelName.toLowerCase().includes(key.toLowerCase()) ||
@@ -200,8 +251,7 @@ class TvGuide {
             const url = this.baseUrl + this.channelUrls[channelKey].url;
             
             try {
-                const html = await this.fetchHtml(url);
-                const programs = this.parseSchedule(html);
+                const programs = await this.getSchedule(url);
                 const { currentProgram, nextProgram } = this.findCurrentProgram(programs);
 
                 if (!currentProgram) {
